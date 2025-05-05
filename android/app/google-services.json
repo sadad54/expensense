@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "36942341468",
+    "project_id": "expensense-b7946",
+    "storage_bucket": "expensense-b7946.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:36942341468:android:963f5890b9a41d82920d99",
+        "android_client_info": {
+          "package_name": "com.example.exp_ocr"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDEpXk8OC35dzK3iALu_xKnhAJjwltFwA0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
