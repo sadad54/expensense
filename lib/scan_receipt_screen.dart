@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
+import 'package:exp_ocr/util/receipt_parser.dart';
 
 Future<File> preprocessImage(File file) async {
   final bytes = await file.readAsBytes();
@@ -14,7 +15,6 @@ Future<File> preprocessImage(File file) async {
   final processedFile = await File(file.path).writeAsBytes(processedBytes);
   return processedFile;
 }
-
 
 class ScanReceiptScreen extends StatefulWidget {
   @override
@@ -30,7 +30,10 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
   final String ocrApiKey = 'K82571272088957'; // ✅ Your OCR.Space API key
 
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await _picker.pickImage(source: source, imageQuality: 80);
+    final pickedFile = await _picker.pickImage(
+      source: source,
+      imageQuality: 80,
+    );
     if (pickedFile != null) {
       setState(() {
         _image = File(pickedFile.path);
@@ -56,16 +59,24 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
         print('No image selected.');
       }
     }
+
     final uri = Uri.parse("https://api.ocr.space/parse/image");
-    final request = http.MultipartRequest('POST', uri)
-      ..headers['apikey'] = ocrApiKey
-      ..fields['language'] = 'eng'
-      ..fields['isOverlayRequired'] = 'false'
-      ..fields['OCREngine'] = '2'               // Better accuracy
-      ..fields['scale'] = 'true'                // Enhance small fonts
-      ..fields['isTable'] = 'true'              // Handle receipt layout
-      ..fields['detectOrientation'] = 'true'    // Auto-rotate fix
-      ..files.add(await http.MultipartFile.fromPath('file', imageFile.path));
+    final request =
+        http.MultipartRequest('POST', uri)
+          ..headers['apikey'] = ocrApiKey
+          ..fields['language'] = 'eng'
+          ..fields['isOverlayRequired'] = 'false'
+          ..fields['OCREngine'] =
+              '2' // Better accuracy
+          ..fields['scale'] =
+              'true' // Enhance small fonts
+          ..fields['isTable'] =
+              'true' // Handle receipt layout
+          ..fields['detectOrientation'] =
+              'true' // Auto-rotate fix
+          ..files.add(
+            await http.MultipartFile.fromPath('file', imageFile.path),
+          );
 
     try {
       final response = await request.send();
@@ -74,9 +85,25 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
       final jsonData = json.decode(result.body);
       if (jsonData['IsErroredOnProcessing'] == false) {
         final parsedText = jsonData['ParsedResults'][0]['ParsedText'];
-        setState(() => _extractedText = parsedText.trim());
+        final parsedDetails = extractDataFromReceipt(parsedText.trim());
+        print("Parsed Data: $parsedDetails");
+
+        setState(() {
+          _extractedText = '''
+Vendor: ${parsedDetails['vendor']}
+Amount: ${parsedDetails['amount']}
+Date: ${parsedDetails['date']}
+Category: ${parsedDetails['category']}
+---
+Raw Text:
+${parsedText.trim()}
+''';
+        });
+        ;
       } else {
-        setState(() => _extractedText = 'OCR failed: ${jsonData['ErrorMessage']}');
+        setState(
+          () => _extractedText = 'OCR failed: ${jsonData['ErrorMessage']}',
+        );
       }
     } catch (e) {
       setState(() => _extractedText = 'Error: $e');
@@ -101,18 +128,15 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
         print('No image selected.');
       }
     }
-    ElevatedButton(
-      onPressed: pickAndProcessImage,
-      child: Text('Scan Receipt'),
-    );
+
+    ElevatedButton(onPressed: pickAndProcessImage, child: Text('Scan Receipt'));
     return Scaffold(
       appBar: AppBar(title: Text("Scan Receipt")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            if (_image != null)
-              Image.file(_image!, height: 200),
+            if (_image != null) Image.file(_image!, height: 200),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -133,15 +157,15 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
             _loading
                 ? CircularProgressIndicator()
                 : Expanded(
-              child: SingleChildScrollView(
-                child: Text(
-                  _extractedText.isEmpty
-                      ? "Scanned text will appear here"
-                      : _extractedText,
-                  style: TextStyle(fontSize: 16),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      _extractedText.isEmpty
+                          ? "Scanned text will appear here"
+                          : _extractedText,
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
                 ),
-              ),
-            ),
           ],
         ),
       ),
