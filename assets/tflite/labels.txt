@@ -1,0 +1,8 @@
+food and drink
+transport
+entertainment
+health
+utilities
+shopping
+education
+other

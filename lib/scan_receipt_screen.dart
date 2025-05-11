@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:exp_ocr/util/inference_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:exp_ocr/util/receipt_parser.dart';
-
+import 'package:tflite_flutter/tflite_flutter.dart';
 Future<File> preprocessImage(File file) async {
   final bytes = await file.readAsBytes();
   final originalImage = img.decodeImage(bytes);
@@ -99,6 +100,11 @@ Raw Text:
 ${parsedText.trim()}
 ''';
         });
+        final helper = InferenceHelper();
+        await helper.loadModel();
+
+        final predictedCategory = helper.predictCategory(_extractedText);
+        print("Predicted Category: $predictedCategory");
         ;
       } else {
         setState(

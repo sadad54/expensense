@@ -49,6 +49,7 @@ dependencies:
   intl: ^0.20.2
   firebase_storage: ^12.4.5
   flutter_slidable: ^4.0.0
+  tflite_flutter: ^0.11.0
 
 dev_dependencies:
   flutter_test:
@@ -79,7 +80,9 @@ flutter:
     - assets/images/google.png
     - assets/tessdata/eng.traineddata
     - assets/tessdata_config.json
-
+    - assets/tflite/model.tflite
+    - assets/tflite/labels.txt
+    - assets/tflite/word_index.json
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
