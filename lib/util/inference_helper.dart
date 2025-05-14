@@ -9,7 +9,7 @@ class InferenceHelper {
   late Map<String, int> wordIndex;
 
   Future<void> loadModel() async {
-    interpreter = await Interpreter.fromAsset('tflite/model.tflite');
+    interpreter = await Interpreter.fromAsset('assets/tflite/model.tflite');
 
     // Load labels
     final labelsData = await rootBundle.loadString('assets/tflite/labels.txt');

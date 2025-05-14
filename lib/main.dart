@@ -1,5 +1,6 @@
+import 'package:exp_ocr/goals_screen.dart';
 import 'package:exp_ocr/home_screen.dart';
-import 'package:exp_ocr/scan_receipt_screen.dart';
+//import 'package:exp_ocr/scan_receipt_screen.dart';
 import 'package:exp_ocr/splash_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -167,10 +168,11 @@ class MyApp extends StatelessWidget {
       initialRoute: '/', // Start with the SplashScreen
       routes: {
         '/': (context) => SplashScreen(),
-        '/scan': (context) => ScanReceiptScreen(),
+        //'/scan': (context) => ScanReceiptScreen(),
         '/transaction': (context) => TransactionScreen(),
         '/signup': (context) => SignupScreen(),
-        '/main': (context) => AuthWrapper(), // Custom wrapper below
+        '/main': (context) => AuthWrapper(),
+        '/goals': (context) => GoalsScreen(), // Custom wrapper below
       },
     );
   }
