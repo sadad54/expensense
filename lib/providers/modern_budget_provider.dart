@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:exp_ocr/models/budget_category_model.dart';
-import 'package:exp_ocr/models/budget_period_model.dart';
-import 'package:exp_ocr/services/modern_budget_service.dart';
+import '../models/budget_category_model.dart';
+import '../models/budget_period_model.dart';
+import '../services/modern_budget_service.dart';
 
 class ModernBudgetProvider with ChangeNotifier {
   final ModernBudgetService _budgetService = ModernBudgetService();
 
-  String? _currentBudgetId;
+  String? _currentBudgetId; // This is important to know which budget to update
   BudgetPeriodModel? _budgetPeriod;
   List<BudgetCategoryModel> _categories = [];
   bool _isLoading = true;
@@ -17,6 +18,7 @@ class ModernBudgetProvider with ChangeNotifier {
   List<BudgetCategoryModel> get categories => _categories;
   bool get isLoading => _isLoading;
   String? get error => _error;
+  String? get currentBudgetId => _currentBudgetId; // Expose current budget ID
 
   double get totalAllocated =>
       _categories.fold(0.0, (sum, item) => sum + item.allocatedAmount);
@@ -35,24 +37,25 @@ class ModernBudgetProvider with ChangeNotifier {
   Future<void> _initializeBudget() async {
     _isLoading = true;
     _error = null;
-    notifyListeners();
+    notifyListeners(); // Notify UI that loading has started
     try {
+      // ensureCurrentBudgetPeriodExists now also creates default categories if period is new
       _currentBudgetId = await _budgetService.ensureCurrentBudgetPeriodExists();
       _listenToPeriod();
       _listenToCategories();
     } catch (e) {
       _error = "Failed to initialize budget: ${e.toString()}";
-      print(_error); // For debugging
+      print(_error);
     } finally {
       _isLoading = false;
-      notifyListeners();
+      notifyListeners(); // Notify UI that loading is complete (or error occurred)
     }
   }
 
+  // Public method to refresh
   Future<void> refreshBudget() async {
-    // You can add any additional logic here if needed before re-initializing
     print("Refreshing budget data...");
-    await _initializeBudget();
+    await _initializeBudget(); // This will re-run the initialization logic
   }
 
   void _listenToPeriod() {
@@ -81,7 +84,6 @@ class ModernBudgetProvider with ChangeNotifier {
         .listen(
           (categoriesData) {
             _categories = categoriesData;
-            // Potentially sort categories here if needed, e.g., by name or creation date
             notifyListeners();
           },
           onError: (e) {
@@ -93,9 +95,20 @@ class ModernBudgetProvider with ChangeNotifier {
   }
 
   Future<void> addCategory(BudgetCategoryModel category) async {
-    if (_currentBudgetId == null) return;
+    if (_currentBudgetId == null) {
+      _error = "No current budget period selected to add category.";
+      notifyListeners();
+      return;
+    }
     try {
-      await _budgetService.addCategory(_currentBudgetId!, category);
+      // Ensure createdAt is set if not already
+      final categoryToAdd =
+          category.createdAt.seconds ==
+                  0 // A simple check if it's a default Timestamp
+              ? category.copyWith(createdAt: Timestamp.now())
+              : category;
+      await _budgetService.addCategory(_currentBudgetId!, categoryToAdd);
+      // The stream _listenToCategories will update the UI
     } catch (e) {
       _error = "Failed to add category: ${e.toString()}";
       notifyListeners();
@@ -103,7 +116,11 @@ class ModernBudgetProvider with ChangeNotifier {
   }
 
   Future<void> updateCategory(BudgetCategoryModel category) async {
-    if (_currentBudgetId == null) return;
+    if (_currentBudgetId == null) {
+      _error = "No current budget period selected to update category.";
+      notifyListeners();
+      return;
+    }
     try {
       await _budgetService.updateCategory(_currentBudgetId!, category);
     } catch (e) {
@@ -113,7 +130,11 @@ class ModernBudgetProvider with ChangeNotifier {
   }
 
   Future<void> deleteCategory(String categoryId) async {
-    if (_currentBudgetId == null) return;
+    if (_currentBudgetId == null) {
+      _error = "No current budget period selected to delete category.";
+      notifyListeners();
+      return;
+    }
     try {
       await _budgetService.deleteCategory(_currentBudgetId!, categoryId);
     } catch (e) {
@@ -122,23 +143,35 @@ class ModernBudgetProvider with ChangeNotifier {
     }
   }
 
-  // Example: Manually trigger a spend update (in a real app, this comes from transaction logging)
-  Future<void> recordSpending(
-    String categoryId,
-    double amountSpentIncrement,
-  ) async {
-    if (_currentBudgetId == null) return;
-    final category = _categories.firstWhere((cat) => cat.id == categoryId);
-    final newSpentAmount = category.spentAmount + amountSpentIncrement;
+  // --- NEW: Method to be called from transaction screens ---
+  Future<void> processTransactionForBudgetUpdate({
+    required String transactionCategoryName, // e.g., "Food & Groceries"
+    required double transactionAmount,
+  }) async {
+    if (_currentBudgetId == null) {
+      print(
+        "Warning: No current budget ID available in ModernBudgetProvider. Cannot update spending.",
+      );
+      // Optionally set an error or handle this state
+      return;
+    }
+    if (transactionAmount <= 0) return;
+
     try {
-      await _budgetService.updateCategorySpentAmount(
-        _currentBudgetId!,
-        categoryId,
-        newSpentAmount,
+      await _budgetService.recordTransactionSpending(
+        budgetId: _currentBudgetId!,
+        transactionCategoryName: transactionCategoryName,
+        amountToIncrement: transactionAmount,
+      );
+      // UI will update via the stream from _listenToCategories
+      print(
+        "Successfully processed transaction for budget update: $transactionCategoryName, Amount: $transactionAmount",
       );
     } catch (e) {
-      _error = "Failed to record spending: ${e.toString()}";
-      notifyListeners();
+      _error =
+          "Failed to update budget spending for transaction: ${e.toString()}";
+      print(_error); // For debugging
+      notifyListeners(); // Notify UI of the error
     }
   }
 

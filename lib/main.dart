@@ -1,9 +1,11 @@
+import 'package:exp_ocr/dummy_data_screen.dart';
 import 'package:exp_ocr/goals_screen.dart';
 import 'package:exp_ocr/home_screen.dart';
 import 'package:exp_ocr/modern_budget_screen.dart';
 import 'package:exp_ocr/providers/modern_budget_provider.dart';
-//import 'package:exp_ocr/scan_receipt_screen.dart';
+import 'package:exp_ocr/scan_receipt_screen.dart';
 import 'package:exp_ocr/splash_screen.dart';
+import 'package:exp_ocr/stats_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,6 +17,7 @@ import 'package:provider/provider.dart';
 import 'package:exp_ocr/signup_screen.dart';
 import 'package:exp_ocr/settings_screen.dart';
 import 'package:exp_ocr/providers/theme_provider.dart';
+import 'package:exp_ocr/income_tax_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -168,13 +171,16 @@ class MyApp extends StatelessWidget {
       initialRoute: '/',
       routes: {
         '/': (context) => SplashScreen(),
-        '/transaction': (context) => const TransactionScreen(),
+        '/transaction': (context) => const TransactionsScreen(),
         '/signup': (context) => const SignupScreen(),
         '/main': (context) => AuthWrapper(),
         '/goals': (context) => const GoalsScreen(),
         '/budgets': (context) => const ModernBudgetScreen(),
+        '/scan': (context) => ScanReceiptScreen(),
+        '/stats': (context) => StatsScreen(),
         '/settings':
             (context) => const SettingsScreen(), // ✅ Settings route added
+        '/incomeTax': (context) => IncomeTaxEstimatorScreen(),
       },
     );
   }
@@ -190,7 +196,7 @@ class AuthWrapper extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (snapshot.hasData) {
-          return HomeScreen(); // or TransactionsScreen if you prefer
+          return HomeScreen();
         }
         return LoginScreen();
       },
