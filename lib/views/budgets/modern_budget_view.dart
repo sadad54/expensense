@@ -3,9 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:percent_indicator/percent_indicator.dart';
 import 'package:provider/provider.dart';
-import "../models/budget_category_model.dart"; // Assuming this path is correct
-import 'package:exp_ocr/providers/modern_budget_provider.dart'; // Assuming this path
-import 'package:exp_ocr/category_form_sheet.dart'; // Assuming this path
+import "../../../models/budget_category_model.dart"; // Assuming this path is correct
+import 'package:exp_ocr/viewmodels/budget_viewmodel.dart'; // Assuming this path
+import 'package:exp_ocr/widgets/category_form_sheet.dart'; // Assuming this path
 
 class ModernBudgetScreen extends StatelessWidget {
   const ModernBudgetScreen({super.key});

@@ -8,9 +8,9 @@ import 'package:percent_indicator/percent_indicator.dart';
 import 'package:flutter_slidable/flutter_slidable.dart'; // If using slidable
 
 // Placeholder for Add/Edit Goal Dialog
-part "add_edit_goal_dialog.dart";
+part "widgets/add_edit_goal_dialog.dart";
 // Placeholder for Add Funds Dialog
-part 'add_funds_dialog.dart';
+part 'widgets/add_funds_dialog.dart';
 
 class GoalsScreen extends StatefulWidget {
   const GoalsScreen({super.key});

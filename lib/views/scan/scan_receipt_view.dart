@@ -10,7 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
-import 'package:exp_ocr/providers/modern_budget_provider.dart';
+import 'package:exp_ocr/viewmodels/budget_viewmodel.dart';
 
 Future<File> preprocessImage(File file) async {
   final bytes = await file.readAsBytes();

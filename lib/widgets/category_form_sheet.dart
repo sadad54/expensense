@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart'; // For Timestamp
 import '../models/budget_category_model.dart';
-import '../providers/modern_budget_provider.dart';
+import '../viewmodels/budget_viewmodel.dart';
 
 class CategoryFormSheet extends StatefulWidget {
   final BudgetCategoryModel? existingCategory;

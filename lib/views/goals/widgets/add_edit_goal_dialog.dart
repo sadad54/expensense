@@ -4,7 +4,7 @@
 // This function can be part of _GoalsScreenState or a standalone helper
 // called from _GoalsScreenState.
 
-part of "goals_screen.dart";
+part of "../goals_view.dart";
 
 void _showAddEditGoalDialog(
   BuildContext context,

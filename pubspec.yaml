@@ -88,6 +88,7 @@ flutter:
     - assets/images/Untitled.png
     - assets/images/facebook.png
     - assets/images/google.png
+    - assets/images/splash.png
     - assets/tessdata/eng.traineddata
     - assets/tessdata_config.json
     - assets/tflite/model.tflite

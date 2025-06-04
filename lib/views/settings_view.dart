@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:exp_ocr/providers/theme_provider.dart'; // optional, for dark mode
+import 'package:exp_ocr/viewmodels/theme_viewmodel.dart'; // optional, for dark mode
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:exp_ocr/edit_profile_screen.dart';
+import 'package:exp_ocr/views/edit_profile_view.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

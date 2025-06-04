@@ -52,6 +52,7 @@ class TransactionModel {
   final double amount;
   final String rawText;
   final DateTime timestamp;
+  final String description;
 
   TransactionModel({
     required this.id,
@@ -59,6 +60,7 @@ class TransactionModel {
     required this.amount,
     required this.rawText,
     required this.timestamp,
+    this.description = '',
   });
 
   factory TransactionModel.fromFirestore(DocumentSnapshot doc) {
@@ -69,6 +71,7 @@ class TransactionModel {
       amount: (data['amount'] ?? 0).toDouble(),
       rawText: data['rawText'] ?? '',
       timestamp: (data['timestamp'] as Timestamp).toDate(),
+      description: data['description'] ?? '',
     );
   }
 
@@ -78,6 +81,7 @@ class TransactionModel {
       'amount': amount,
       'rawText': rawText,
       'timestamp': FieldValue.serverTimestamp(),
+      'description': description,
     };
   }
 }

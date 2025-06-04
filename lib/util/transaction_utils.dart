@@ -22,6 +22,7 @@ Future<void> saveTransactionAndUpdateBudget({
     amount: amount,
     rawText: rawText,
     timestamp: timestamp,
+    description: rawText,
   );
 
   final docRef = await FirebaseFirestore.instance
@@ -30,7 +31,10 @@ Future<void> saveTransactionAndUpdateBudget({
       .collection('transactions')
       .add(transaction.toMap());
 
-  final budgetProvider = Provider.of<ModernBudgetProvider>(context, listen: false);
+  final budgetProvider = Provider.of<ModernBudgetProvider>(
+    context,
+    listen: false,
+  );
   await budgetProvider.processTransactionForBudgetUpdate(
     transactionCategoryName: categoryName,
     transactionAmount: amount,

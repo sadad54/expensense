@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:exp_ocr/home_screen.dart'; // Replace with your actual home screen
-import 'signup_screen.dart';
+import 'package:exp_ocr/views/home/home_view.dart'; // Replace with your actual home screen
+import 'signup_view.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);

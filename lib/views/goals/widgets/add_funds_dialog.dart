@@ -1,7 +1,7 @@
 // In goals_screen.dart, add this line at the top:
 // part 'add_funds_dialog.dart'; // (if you make it a true part file, this content goes there)
 
-part of 'goals_screen.dart';
+part of '../goals_view.dart';
 
 void _showAddFundsDialog(
   BuildContext context,
