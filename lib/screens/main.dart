@@ -180,7 +180,7 @@ class MyApp extends StatelessWidget {
         '/stats': (context) => StatsScreen(),
         '/settings':
             (context) => const SettingsScreen(), // ✅ Settings route added
-        '/incomeTax': (context) => IncomeTaxEstimatorScreen(),
+        '/incomeTax': (context) => IncomeTaxTrackerScreen(),
       },
     );
   }

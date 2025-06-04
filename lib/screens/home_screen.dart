@@ -736,10 +736,12 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   double _balance = 0.0;
   double _income = 0.0;
+  Goal? _goal;
+  double _manualMonthlyIncome = 0.0;
+
   double _expenses = 0.0;
   List<Map<String, dynamic>> _recentTransactions = [];
   List<Map<String, dynamic>> _budgets = [];
-  Map<String, dynamic>? _goal;
 
   // --- New state variables for Home Screen charts ---
   bool _chartsLoading = true;
@@ -785,6 +787,64 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchRecentTransactions();
     _fetchBudgets();
     _fetchGoal();
+  }
+
+  void _showIncomeEntryDialog() {
+    final controller = TextEditingController(
+      text: _manualMonthlyIncome.toStringAsFixed(2),
+    );
+    final now = DateTime.now();
+    final incomeDocId = '${now.year}_${now.month.toString().padLeft(2, '0')}';
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Enter Monthly Income'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'Amount (MYR)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Cancel'),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            ElevatedButton(
+              child: const Text('Save'),
+              onPressed: () async {
+                final uid = FirebaseAuth.instance.currentUser?.uid;
+                if (uid == null) return;
+
+                final parsed = double.tryParse(controller.text);
+                if (parsed == null) return;
+
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .collection('monthlyIncome')
+                    .doc(incomeDocId)
+                    .set({'amount': parsed});
+
+                if (mounted) {
+                  setState(() {
+                    _manualMonthlyIncome = parsed;
+                    _income = parsed;
+                    _balance = _income - _expenses;
+                  });
+                }
+
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // --- New method to fetch data for Home Screen charts (current month) ---
@@ -895,7 +955,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ).then((_) => setState(() => _selectedIndex = 0));
         break;
       case 3: // FAB action (Scan)
-        Navigator.pushNamed(context, '/scan_receipt_screen').then((_) {
+        Navigator.pushNamed(context, '/scan').then((_) {
           // Assuming '/scan_receipt_screen' is correct route
           if (mounted)
             setState(
@@ -932,58 +992,62 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchBalanceAndSummary() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
-      if (mounted) {
-        setState(() {
-          _income = 0;
-          _expenses = 0;
-          _balance = 0;
-        });
-      }
+      if (mounted) setState(() => _income = _expenses = _balance = 0);
       return;
     }
+
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, 1);
+    final end = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
     try {
       final query =
           await FirebaseFirestore.instance
               .collection('users')
               .doc(uid)
               .collection('generalTransactions')
+              .where(
+                'timestamp',
+                isGreaterThanOrEqualTo: Timestamp.fromDate(start),
+              )
+              .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(end))
               .get();
-      double income = 0;
-      double expense = 0;
 
-      // Determine income/expense. Your 'generalTransactions' might not have a 'type' field.
-      // The `ScanReceiptScreen` saves transactions without an explicit 'type'.
-      // For this summary, you might need to decide how to classify them or add a 'type' when logging.
-      // Assuming all are expenses for now for simplicity in this card, unless you add a type.
+      double expense = 0;
       for (var doc in query.docs) {
         final data = doc.data();
+        final category = data['categoryName'] ?? '';
         final amount = (data['amount'] ?? 0).toDouble();
-        final String categoryName = data['categoryName'] ?? "Other";
 
-        // Example: If "Salary" or "Freelance Income" are categoryNames for income
-        if (categoryName.toLowerCase().contains('salary') ||
-            categoryName.toLowerCase().contains('income')) {
-          income += amount;
-        } else {
+        if (!category.toLowerCase().contains('income')) {
           expense += amount;
         }
       }
+
+      final incomeDoc =
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(uid)
+              .collection('monthlyIncome')
+              .doc('${now.year}_${now.month.toString().padLeft(2, '0')}')
+              .get();
+
+      double income = 0;
+      if (incomeDoc.exists) {
+        income = (incomeDoc.data()?['amount'] ?? 0).toDouble();
+      }
+
       if (mounted) {
         setState(() {
           _income = income;
+          _manualMonthlyIncome = income;
           _expenses = expense;
           _balance = income - expense;
         });
       }
     } catch (e) {
-      print("Error fetching balance and summary: $e");
-      if (mounted) {
-        setState(() {
-          _income = 0;
-          _expenses = 0;
-          _balance = 0;
-        });
-      }
+      print("Error calculating balance: $e");
+      if (mounted) setState(() => _income = _expenses = _balance = 0);
     }
   }
 
@@ -1066,21 +1130,16 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final snapshot =
           await FirebaseFirestore.instance
-              .collection('users')
-              .doc(uid)
-              .collection('goals')
-              .orderBy(
-                'targetDate',
-              ) // Make sure 'targetDate' exists in your goal documents
+              .collection('goals') // 🔥 Top-level collection
+              .where('userId', isEqualTo: uid)
+              .orderBy('createdAt', descending: true)
               .limit(1)
               .get();
 
       if (mounted) {
         if (snapshot.docs.isNotEmpty) {
           setState(() {
-            _goal =
-                Goal.fromFirestore(snapshot.docs.first)
-                    as Map<String, dynamic>?; // Use your factory constructor
+            _goal = Goal.fromFirestore(snapshot.docs.first);
           });
         } else {
           setState(() => _goal = null);
@@ -1336,7 +1395,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ElevatedButton.icon(
               onPressed: () {
                 // Example: Navigate to a hypothetical Tax Info screen
-                // Navigator.pushNamed(context, '/tax_info_screen');
+                Navigator.pushNamed(context, '/incomeTax');
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
                     content: Text("Tax Info coming soon!"),
@@ -1378,45 +1437,51 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       children: [
         Expanded(
-          child: Card(
-            color: Theme.of(
-              context,
-            ).colorScheme.primaryContainer.withOpacity(0.5), // Use theme color
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-            elevation: 3,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-              child: Column(
-                children: [
-                  Text(
-                    'Income',
-                    style: GoogleFonts.poppins(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                      fontSize: 14,
+          child: GestureDetector(
+            onTap: _showIncomeEntryDialog,
+            child: Card(
+              color: Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withOpacity(0.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+              elevation: 3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 20,
+                  horizontal: 16,
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      'Income',
+                      style: GoogleFonts.poppins(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    NumberFormat.currency(
-                      locale: 'en_MY',
-                      symbol: 'MYR ',
-                      decimalDigits: 2,
-                    ).format(_income),
-                    style: GoogleFonts.poppins(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                    const SizedBox(height: 8),
+                    Text(
+                      NumberFormat.currency(
+                        locale: 'en_MY',
+                        symbol: 'MYR ',
+                      ).format(_income),
+                      style: GoogleFonts.poppins(
+                        color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
+
         const SizedBox(width: 12),
         Expanded(
           child: Card(
@@ -1890,10 +1955,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildGoalCard() {
-    if (_goal == null && !_chartsLoading) {
-      // Check loading state
+    if (_goal == null) {
       return GestureDetector(
-        onTap: () => _onTabTapped(4), // Use _onTabTapped
+        onTap: () => Navigator.pushNamed(context, '/goals'),
         child: Card(
           color: const Color(0xFF1C1C1E),
           shape: RoundedRectangleBorder(
@@ -1925,31 +1989,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-    if (_chartsLoading && _goal == null) {
-      // Show loader if goal is null and still loading
-      return Card(
-        color: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        margin: const EdgeInsets.only(top: 12),
-        child: const SizedBox(
-          height: 100,
-          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        ),
-      );
-    }
-    if (_goal == null)
-      return const SizedBox.shrink(); // Should be caught by above conditions
 
-    final double saved =
-        (_goal!['currentAmount'] ?? _goal!['saved'] ?? 0.0)
-            .toDouble(); // Accommodate 'currentAmount' or 'saved'
-    final double target =
-        (_goal!['targetAmount'] ?? _goal!['target'] ?? 1.0)
-            .toDouble(); // Accommodate 'targetAmount' or 'target'
-    final double progress = target <= 0 ? 0 : (saved / target).clamp(0.0, 1.0);
+    final double progress = _goal!.progress;
+    final double saved = _goal!.currentAmount;
+    final double target = _goal!.targetAmount;
+    final String title = _goal!.goalName;
 
     return GestureDetector(
-      onTap: () => _onTabTapped(4), // Use _onTabTapped
+      onTap: () => Navigator.pushNamed(context, '/goals'),
       child: Card(
         color: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -1970,9 +2017,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                _goal!['name'] ??
-                    _goal!['title'] ??
-                    "Untitled Goal", // Accommodate 'name' or 'title'
+                title,
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontSize: 18,
@@ -1993,7 +2038,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "${NumberFormat.currency(locale: 'en_MY', symbol: 'MYR ').format(saved)} / ${NumberFormat.currency(locale: 'en_MY', symbol: 'MYR ').format(target)}",
+                    "MYR ${saved.toStringAsFixed(2)} / ${target.toStringAsFixed(2)}",
                     style: GoogleFonts.poppins(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 12,
