@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/transaction_model.dart';
 import 'package:provider/provider.dart';
-import '../providers/modern_budget_provider.dart';
+import '../viewmodels/budget_viewmodel.dart';
 import 'package:flutter/material.dart';
 
 Future<void> saveTransactionAndUpdateBudget({
