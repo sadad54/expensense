@@ -108,7 +108,7 @@ class _SplashScreenState extends State<SplashScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Timer(Duration(seconds: 15), () {
+      Timer(Duration(minutes: 2), () {
         Navigator.pushNamed(context, '/signup');
       });
     });
