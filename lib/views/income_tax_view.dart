@@ -1,7 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
 
 class IncomeTaxTrackerScreen extends StatefulWidget {
   @override
@@ -37,7 +40,7 @@ class _IncomeTaxTrackerScreenState extends State<IncomeTaxTrackerScreen> {
           await FirebaseFirestore.instance
               .collection("users")
               .doc(uid)
-              .collection("generalTransactions")
+              .collection("transactions") // Correct collection
               .get();
 
       List<TaxDeductionCategory> all = [];
@@ -51,7 +54,7 @@ class _IncomeTaxTrackerScreenState extends State<IncomeTaxTrackerScreen> {
 
         for (var tx in transactionsSnap.docs) {
           final txData = tx.data();
-          final desc = (txData['description'] ?? '').toString().toLowerCase();
+          final desc = (txData['rawText'] ?? '').toString().toLowerCase();
 
           if (tags.any((tag) => desc.contains(tag.toLowerCase()))) {
             final amt = (txData['amount'] ?? 0).toDouble();
@@ -78,13 +81,28 @@ class _IncomeTaxTrackerScreenState extends State<IncomeTaxTrackerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Scaffold(
-      appBar: AppBar(title: const Text("Tax Deduction Tracker")),
-      body:
-          _loading
-              ? const Center(child: CircularProgressIndicator())
-              : ListView.builder(
+    return Consumer<TaxCategoryNotifier>(
+      builder: (context, notifier, _) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text("Tax Deduction Tracker"),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: () async {
+                  setState(() => _loading = true);
+                  await _loadTaxCategories();
+                },
+              ),
+            ],
+          ),
+          body: FutureBuilder(
+            future: _loadTaxCategories(),
+            builder: (context, snapshot) {
+              if (_loading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return ListView.builder(
                 padding: const EdgeInsets.all(16),
                 itemCount: _categories.length,
                 itemBuilder: (_, i) {
@@ -125,7 +143,11 @@ class _IncomeTaxTrackerScreenState extends State<IncomeTaxTrackerScreen> {
                     ),
                   );
                 },
-              ),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 }

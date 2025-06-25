@@ -39,4 +39,8 @@ Future<void> saveTransactionAndUpdateBudget({
     transactionCategoryName: categoryName,
     transactionAmount: amount,
   );
+  await FirebaseFirestore.instance
+      .collection('users')
+      .doc(FirebaseAuth.instance.currentUser?.uid)
+      .update({'expenses': FieldValue.increment(amount)});
 }

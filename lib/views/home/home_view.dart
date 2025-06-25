@@ -738,6 +738,7 @@ class _HomeScreenState extends State<HomeScreen> {
   double _income = 0.0;
   Goal? _goal;
   double _manualMonthlyIncome = 0.0;
+  late final Stream<DocumentSnapshot<Map<String, dynamic>>> _userStream;
 
   double _expenses = 0.0;
   List<Map<String, dynamic>> _recentTransactions = [];
@@ -776,10 +777,21 @@ class _HomeScreenState extends State<HomeScreen> {
   final String username = "Adnan";
 
   @override
+  @override
   void initState() {
     super.initState();
-    _fetchAllData();
-    _fetchHomeScreenChartData(); // Fetch data for home screen charts
+
+    // This will listen to the user's document in real-time
+    _userStream =
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(FirebaseAuth.instance.currentUser?.uid)
+            .snapshots();
+
+    _fetchRecentTransactions();
+    _fetchBudgets();
+    _fetchGoal();
+    _fetchHomeScreenChartData();
   }
 
   void _fetchAllData() {
@@ -826,9 +838,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 await FirebaseFirestore.instance
                     .collection('users')
                     .doc(uid)
-                    .collection('monthlyIncome')
-                    .doc(incomeDocId)
-                    .set({'amount': parsed});
+                    .set({'income': parsed}, SetOptions(merge: true));
 
                 if (mounted) {
                   setState(() {
@@ -1228,9 +1238,73 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildUserHeader(),
               const SizedBox(height: 20),
-              _buildBalanceCard(),
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser?.uid)
+                        .collection('generalTransactions')
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  double income = 0.0;
+                  double expenses = 0.0;
+
+                  for (var doc in snapshot.data!.docs) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final amount = (data['amount'] ?? 0).toDouble();
+                    final type =
+                        (data['type'] ?? 'expense').toString().toLowerCase();
+
+                    if (type == 'income') {
+                      income += amount;
+                    } else {
+                      expenses += amount;
+                    }
+                  }
+
+                  final balance = income - expenses;
+
+                  return _buildDynamicBalanceCard(income, expenses, balance);
+                },
+              ),
+
               const SizedBox(height: 20),
-              _buildInfoCardsRow(),
+              StreamBuilder<QuerySnapshot>(
+                stream:
+                    FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(FirebaseAuth.instance.currentUser?.uid)
+                        .collection('generalTransactions')
+                        .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  double income = 0.0;
+                  double expenses = 0.0;
+
+                  for (var doc in snapshot.data!.docs) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    final amount = (data['amount'] ?? 0).toDouble();
+                    final type =
+                        (data['type'] ?? 'expense').toString().toLowerCase();
+
+                    if (type == 'income') {
+                      income += amount;
+                    } else {
+                      expenses += amount;
+                    }
+                  }
+
+                  return _buildInfoCardsRow(income, expenses);
+                },
+              ),
+
               const SizedBox(height: 20),
               // --- Replace Placeholder with Actual Charts ---
               _buildStatsPreviewSection(), // New method for stats preview
@@ -1363,7 +1437,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBalanceCard() {
+  Widget _buildDynamicBalanceCard(
+    double income,
+    double expenses,
+    double balance,
+  ) {
     return Card(
       color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
@@ -1379,12 +1457,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              // Consider using your app's default currency symbol or intl package for proper formatting
-              NumberFormat.currency(
-                locale: 'en_MY',
-                symbol: 'MYR ',
-                decimalDigits: 2,
-              ).format(_balance),
+              'MYR ${balance.toStringAsFixed(2)}',
               style: GoogleFonts.poppins(
                 color: Colors.white,
                 fontSize: 32,
@@ -1393,23 +1466,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: () {
-                // Example: Navigate to a hypothetical Tax Info screen
-                Navigator.pushNamed(context, '/incomeTax');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text("Tax Info coming soon!"),
-                    duration: Duration(seconds: 1),
-                  ),
-                );
-              },
+              onPressed: () => Navigator.pushNamed(context, '/incomeTax'),
               icon: const Icon(
                 Icons.receipt_long_rounded,
                 color: Colors.black87,
                 size: 20,
               ),
               label: Text(
-                "Tax Info",
+                'Tax Info',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w500,
                   color: Colors.black87,
@@ -1433,7 +1497,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildInfoCardsRow() {
+  Widget _buildInfoCardsRow(double income, double expenses) {
     return Row(
       children: [
         Expanded(
@@ -1468,7 +1532,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       NumberFormat.currency(
                         locale: 'en_MY',
                         symbol: 'MYR ',
-                      ).format(_income),
+                      ).format(income),
                       style: GoogleFonts.poppins(
                         color: Theme.of(context).colorScheme.onPrimaryContainer,
                         fontSize: 18,
@@ -1511,7 +1575,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       locale: 'en_MY',
                       symbol: 'MYR ',
                       decimalDigits: 2,
-                    ).format(_expenses),
+                    ).format(expenses),
                     style: GoogleFonts.poppins(
                       color: Theme.of(context).colorScheme.onErrorContainer,
                       fontSize: 18,

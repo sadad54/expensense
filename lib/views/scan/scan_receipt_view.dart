@@ -11,13 +11,20 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 import 'package:exp_ocr/viewmodels/budget_viewmodel.dart';
+import 'package:provider/provider.dart';
+import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
 
 Future<File> preprocessImage(File file) async {
   final bytes = await file.readAsBytes();
   final originalImage = img.decodeImage(bytes);
   if (originalImage == null) return file;
   final grayscale = img.grayscale(originalImage);
-  final highContrast = img.adjustColor(grayscale, contrast: 1.2);
+  final resized = img.copyResize(
+    grayscale,
+    width: 1024,
+  ); // Optional but recommended
+  final highContrast = img.adjustColor(resized, contrast: 1.2);
+
   final processedBytes = img.encodeJpg(highContrast);
 
   final directory = file.parent;
@@ -78,10 +85,10 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
     final uri = Uri.parse("https://api.ocr.space/parse/image");
     final request =
         http.MultipartRequest('POST', uri)
-          ..headers['apikey'] = ocrApiKey
+          ..fields['apikey'] = ocrApiKey
           ..fields['language'] = 'eng'
           ..fields['isOverlayRequired'] = 'false'
-          ..fields['OCREngine'] = '2'
+          ..fields['OCREngine'] = '1'
           ..fields['scale'] = 'true'
           ..fields['isTable'] = 'true'
           ..fields['detectOrientation'] = 'true'
@@ -92,6 +99,10 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
     try {
       final response = await request.send();
       final result = await http.Response.fromStream(response);
+
+      print('🛰️ OCR Response Code: ${result.statusCode}');
+      print('📥 OCR Raw Body: ${result.body}');
+
       final jsonData = json.decode(result.body);
 
       if (jsonData['IsErroredOnProcessing'] == false &&
@@ -135,7 +146,7 @@ Category: $transactionCategoryName
 Raw Text:
 ${parsedText.trim()}
 ''';
-          _statusMessage = 'Scan successful!';
+          _statusMessage = '✅ Scan successful!';
         });
 
         if (transactionCategoryName != "Uncategorized" && amount > 0) {
@@ -156,16 +167,123 @@ ${parsedText.trim()}
               ),
             ),
           );
+          if (_isIncomeTaxRelevant(transactionCategoryName)) {
+            Provider.of<TaxCategoryNotifier>(context, listen: false).refresh();
+          }
         }
       } else {
-        setState(() => _statusMessage = '❌ OCR failed to extract text.');
+        setState(() {
+          _statusMessage = '❌ OCR failed to extract text.';
+          _extractedText = 'Raw Response:\n${result.body}';
+        });
       }
     } catch (e) {
-      setState(() => _statusMessage = '❌ Error processing receipt: $e');
+      setState(() {
+        _statusMessage = '❌ Error processing receipt: $e';
+        _extractedText = '⚠️ Check your internet connection or image format.';
+      });
     } finally {
       setState(() => _loading = false);
     }
   }
+
+  //   Future<void> _uploadImageToOCRSpace(File imageFile) async {
+  //     setState(() {
+  //       _loading = true;
+  //       _statusMessage = 'Uploading to OCR and parsing...';
+  //     });
+
+  //     final uri = Uri.parse("https://api.ocr.space/parse/image");
+  //     final request =
+  //         http.MultipartRequest('POST', uri)
+  //           ..headers['apikey'] = ocrApiKey
+  //           ..fields['language'] = 'eng'
+  //           ..fields['isOverlayRequired'] = 'false'
+  //           ..fields['OCREngine'] = '2'
+  //           ..fields['scale'] = 'true'
+  //           ..fields['isTable'] = 'true'
+  //           ..fields['detectOrientation'] = 'true'
+  //           ..files.add(
+  //             await http.MultipartFile.fromPath('file', imageFile.path),
+  //           );
+
+  //     try {
+  //       final response = await request.send();
+  //       final result = await http.Response.fromStream(response);
+  //       final jsonData = json.decode(result.body);
+
+  //       if (jsonData['IsErroredOnProcessing'] == false &&
+  //           jsonData['ParsedResults'] != null &&
+  //           jsonData['ParsedResults'].isNotEmpty) {
+  //         final parsedText = jsonData['ParsedResults'][0]['ParsedText'] ?? '';
+  //         final parsedDetails = extractDataFromReceipt(parsedText.trim());
+
+  //         String transactionCategoryName = hybridCategoryMatch(parsedText.trim());
+
+  //         if (transactionCategoryName == "Uncategorized") {
+  //           final pickedCategory = await _showTransactionCategoryPicker(context);
+  //           if (pickedCategory != null) {
+  //             transactionCategoryName = pickedCategory;
+  //           } else {
+  //             setState(() {
+  //               _extractedText = 'Raw Text:\n${parsedText.trim()}';
+  //               _statusMessage = '⚠️ Transaction Uncategorized.';
+  //               _loading = false;
+  //             });
+  //             return;
+  //           }
+  //         }
+
+  //         final amount =
+  //             double.tryParse(
+  //               parsedDetails['amount'].toString().replaceAll(
+  //                 RegExp(r'[^0-9.]'),
+  //                 '',
+  //               ),
+  //             ) ??
+  //             0.0;
+
+  //         setState(() {
+  //           _extractedText = '''
+  // Vendor: ${parsedDetails['vendor']}
+  // Amount: \$${amount.toStringAsFixed(2)}
+  // Date: ${parsedDetails['date']}
+  // Category: $transactionCategoryName
+  // ---
+  // Raw Text:
+  // ${parsedText.trim()}
+  // ''';
+  //           _statusMessage = 'Scan successful!';
+  //         });
+
+  //         if (transactionCategoryName != "Uncategorized" && amount > 0) {
+  //           await saveTransactionAndUpdateBudget(
+  //             context: context,
+  //             categoryName: transactionCategoryName,
+  //             amount: amount,
+  //             rawText: parsedText.trim(),
+  //             timestamp:
+  //                 DateTime.tryParse(parsedDetails['date'] ?? '') ??
+  //                 DateTime.now(),
+  //           );
+
+  //           ScaffoldMessenger.of(context).showSnackBar(
+  //             SnackBar(
+  //               content: Text(
+  //                 "✅ \$${amount.toStringAsFixed(2)} logged under '$transactionCategoryName'",
+  //               ),
+  //             ),
+  //           );
+  //         }
+  //       } else {
+  //         setState(() => _statusMessage = '❌ OCR failed to extract text.');
+  //       }
+  //     } catch (e) {
+  //       setState(() => _statusMessage = '❌ Error processing receipt: $e');
+  //     } finally {
+  //       setState(() => _loading = false);
+  //     }
+  //   }
 
   Future<String?> _showTransactionCategoryPicker(BuildContext context) async {
     const List<String> transactionCategories = [
@@ -328,4 +446,17 @@ ${parsedText.trim()}
       ),
     );
   }
+}
+
+bool _isIncomeTaxRelevant(String category) {
+  return [
+    "Food & Groceries",
+    "Dining & Takeout",
+    "Transportation",
+    "Utilities",
+    "Housing & Rent",
+    "Health & Personal Care",
+    "Entertainment & Subscriptions",
+    "Shopping & Miscellaneous",
+  ].contains(category);
 }

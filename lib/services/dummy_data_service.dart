@@ -26,7 +26,7 @@ Future<void> uploadDummyTransactions() async {
 
   // Generate 5 transactions for each of the past 6 months
   for (int m = 0; m < 6; m++) {
-    final month = DateTime(now.year, now.month - m, 1);
+    final month = DateTime(now.year, now.month - m, now.day);
 
     for (int i = 0; i < 5; i++) {
       final randomCategory = (categories..shuffle()).first;
