@@ -6,6 +6,7 @@ import 'package:exp_ocr/util/receipt_parser.dart';
 import 'package:exp_ocr/util/transaction_utils.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
@@ -51,7 +52,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
   String _statusMessage = '';
 
   final ImagePicker _picker = ImagePicker();
-  final String ocrApiKey = 'K82571272088957';
+  final String ocrApiKey = dotenv.env['OCR_API_KEY'] ?? '';
 
   Future<void> _pickImage(ImageSource source) async {
     try {

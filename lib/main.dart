@@ -227,10 +227,12 @@ import 'package:exp_ocr/views/settings_view.dart';
 import 'package:exp_ocr/viewmodels/theme_viewmodel.dart';
 import 'package:exp_ocr/views/income_tax_view.dart';
 import 'package:exp_ocr/views/scan/scan_receipt_view.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await dotenv.load(fileName: ".env");
   Animate.restartOnHotReload = true;
 
   runApp(

@@ -33,7 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _logout() async {
     await FirebaseAuth.instance.signOut();
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/login'); // update as needed
+      Navigator.of(context).pushReplacementNamed('/'); // update as needed
     }
   }
 
