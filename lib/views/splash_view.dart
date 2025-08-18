@@ -94,170 +94,131 @@
 // //     );
 // //   }
 // // }
-// import 'dart:async';
-// import 'package:flutter/material.dart';
-// import 'package:google_fonts/google_fonts.dart';
-
-// class SplashScreen extends StatefulWidget {
-//   @override
-//   _SplashScreenState createState() => _SplashScreenState();
-// }
-
-// class _SplashScreenState extends State<SplashScreen> {
-//   @override
-//   void initState() {
-//     super.initState();
-//     WidgetsBinding.instance.addPostFrameCallback((_) {
-//       Timer(Duration(minutes: 2), () {
-//         Navigator.pushNamed(context, '/signup');
-//       });
-//     });
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       body: Stack(
-//         fit: StackFit.expand,
-//         children: [
-//           // Background Image
-//           Image.asset("assets/images/splash.png", fit: BoxFit.cover),
-
-//           // Gradient overlay for better text readability
-//           Container(
-//             decoration: BoxDecoration(
-//               gradient: LinearGradient(
-//                 colors: [
-//                   Colors.black.withOpacity(0.6),
-//                   Colors.black.withOpacity(0.6),
-//                 ],
-//                 begin: Alignment.topCenter,
-//                 end: Alignment.bottomCenter,
-//               ),
-//             ),
-//           ),
-
-//           // Foreground content
-//           Center(
-//             child: Padding(
-//               padding: const EdgeInsets.symmetric(horizontal: 24.0),
-//               child: Column(
-//                 mainAxisAlignment: MainAxisAlignment.center,
-//                 children: [
-//                   // Optional: App Icon or Logo above text
-//                   Image.asset(
-//                     "assets/images/Untitled.png", // Make sure logo is optimized for contrast
-//                     height: 100,
-//                   ),
-//                   SizedBox(height: 20),
-
-//                   Text(
-//                     "ExpenSense",
-//                     style: GoogleFonts.inter(
-//                       color: Color(0xFF00FFA3),
-//                       fontSize: 28,
-//                       fontWeight: FontWeight.bold,
-//                     ),
-//                   ),
-//                   SizedBox(height: 10),
-
-//                   Text(
-//                     "Track. Save. Grow.",
-//                     style: GoogleFonts.poppins(
-//                       color: Color(0xFF5A5AFF),
-//                       fontSize: 16,
-//                       fontWeight: FontWeight.w600,
-//                     ),
-//                   ),
-//                   SizedBox(height: 8),
-
-//                   Text(
-//                     "Smart spending starts here.",
-//                     style: GoogleFonts.poppins(
-//                       color: Colors.white70,
-//                       fontSize: 14,
-//                     ),
-//                     textAlign: TextAlign.center,
-//                   ),
-//                   SizedBox(height: 40),
-
-//                   // Get Started Button
-//                   Container(
-//                     width: double.infinity,
-//                     height: 50,
-//                     decoration: BoxDecoration(
-//                       gradient: LinearGradient(
-//                         colors: [Color(0xFF10B981), Color(0xFF00D1FF)],
-//                         begin: Alignment.topLeft,
-//                         end: Alignment.bottomRight,
-//                       ),
-//                       borderRadius: BorderRadius.circular(12),
-//                     ),
-//                     child: ElevatedButton(
-//                       onPressed: () {
-//                         Navigator.pushNamed(context, '/signup');
-//                       },
-//                       style: ElevatedButton.styleFrom(
-//                         backgroundColor: Colors.transparent,
-//                         shadowColor: Colors.transparent,
-//                         shape: RoundedRectangleBorder(
-//                           borderRadius: BorderRadius.circular(12),
-//                         ),
-//                       ),
-//                       child: Text(
-//                         "Get Started",
-//                         style: GoogleFonts.inter(
-//                           color: Colors.white,
-//                           fontSize: 18,
-//                           fontWeight: FontWeight.bold,
-//                         ),
-//                       ),
-//                     ),
-//                   ),
-//                 ],
-//               ),
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  _SplashScreenState createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _navigateAfterDelay();
-  }
-
-  void _navigateAfterDelay() async {
-    await Future.delayed(
-      const Duration(seconds: 2),
-    ); // Optional: branding delay
-
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user != null) {
-      Navigator.pushReplacementNamed(context, '/main'); // Go to AuthWrapper
-    } else {
-      Navigator.pushReplacementNamed(context, '/signup'); // Or '/login'
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Timer(Duration(minutes: 2), () {
+        Navigator.pushNamed(context, '/signup');
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFF1C1C1E),
-      body: Center(
-        child: CircularProgressIndicator(), // You can show your logo here
+    return Scaffold(
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background Image
+          Image.asset("assets/images/splash.png", fit: BoxFit.cover),
+
+          // Gradient overlay for better text readability
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.black.withOpacity(0.6),
+                  Colors.black.withOpacity(0.6),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+          ),
+
+          // Foreground content
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Optional: App Icon or Logo above text
+                  Image.asset(
+                    "assets/images/Untitled.png", // Make sure logo is optimized for contrast
+                    height: 100,
+                  ),
+                  SizedBox(height: 20),
+
+                  Text(
+                    "ExpenSense",
+                    style: GoogleFonts.inter(
+                      color: Color(0xFF00FFA3),
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 10),
+
+                  Text(
+                    "Track. Save. Grow.",
+                    style: GoogleFonts.poppins(
+                      color: Color(0xFF5A5AFF),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+
+                  Text(
+                    "Smart spending starts here.",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white70,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  SizedBox(height: 40),
+
+                  // Get Started Button
+                  Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF10B981), Color(0xFF00D1FF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/signup');
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        "Get Started",
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

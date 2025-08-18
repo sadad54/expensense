@@ -5,6 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../models/transaction_model.dart';
 import '../../../viewmodels/budget_viewmodel.dart';
+import 'package:exp_ocr/util/transaction_utils.dart';
+import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
 import '../../../util/receipt_parser.dart';
 import '../../../util/category_hybrid_matcher.dart';
 
@@ -113,6 +115,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     final _formKey = GlobalKey<FormState>();
     String? category;
     double? amount;
+    String? description;
     DateTime timestamp = DateTime.now();
 
     await showDialog(
@@ -162,6 +165,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                                 ? 'Enter valid amount'
                                 : null,
                   ),
+                  TextFormField(
+                    decoration: const InputDecoration(
+                      labelText: 'Description (for tax matching)',
+                      labelStyle: TextStyle(color: Colors.white),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.tealAccent),
+                      ),
+                    ),
+                    style: const TextStyle(color: Colors.white),
+                    onSaved: (val) => description = val,
+                  ),
                 ],
               ),
             ),
@@ -186,40 +200,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                     if (uid == null || category == null || amount == null)
                       return;
 
-                    final newTxn = TransactionModel(
-                      id: '',
-                      categoryId: category!,
+                    final raw =
+                        (description?.trim().isNotEmpty ?? false)
+                            ? description!.trim()
+                            : category!;
+
+                    await saveTransactionAndUpdateBudget(
+                      context: context,
+                      categoryName: category!,
                       amount: amount!,
-                      rawText: 'Manual Entry',
+                      rawText: raw,
                       timestamp: timestamp,
                     );
 
-                    final docRef = await _db
-                        .collection('users')
-                        .doc(uid)
-                        .collection('transactions')
-                        .add(newTxn.toMap());
-
-                    final savedTxn = TransactionModel(
-                      id: docRef.id,
-                      categoryId: newTxn.categoryId,
-                      amount: newTxn.amount,
-                      rawText: newTxn.rawText,
-                      timestamp: newTxn.timestamp,
-                    );
-
-                    setState(() {
-                      _transactions.insert(0, savedTxn);
-                    });
-
-                    final budgetProvider = Provider.of<ModernBudgetProvider>(
+                    await _loadTransactions();
+                    Provider.of<TaxCategoryNotifier>(
                       context,
                       listen: false,
-                    );
-                    await budgetProvider.processTransactionForBudgetUpdate(
-                      transactionCategoryName: category!,
-                      transactionAmount: amount!,
-                    );
+                    ).refresh();
 
                     Navigator.of(context).pop();
                   }

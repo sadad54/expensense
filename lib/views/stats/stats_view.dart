@@ -414,7 +414,7 @@ class _StatsScreenState extends State<StatsScreen> {
         await FirebaseFirestore.instance
             .collection("users")
             .doc(uid)
-            .collection("generalTransactions")
+            .collection("transactions")
             .where(
               "timestamp",
               isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
@@ -431,9 +431,11 @@ class _StatsScreenState extends State<StatsScreen> {
       final data = doc.data();
       final timestamp = (data['timestamp'] as Timestamp?)?.toDate();
       if (timestamp == null) continue;
+      final String categoryName =
+          (data['categoryName'] ?? data['categoryId'] ?? 'Other').toString();
       allFetchedTransactions.add(
         TransactionDataPoint(
-          categoryName: data['categoryName'] ?? 'Other',
+          categoryName: categoryName,
           amount: (data['amount'] ?? 0.0).toDouble(),
           date: timestamp,
         ),

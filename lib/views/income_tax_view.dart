@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
+// duplicate import removed
 
 class IncomeTaxTrackerScreen extends StatefulWidget {
   @override
@@ -52,11 +52,26 @@ class _IncomeTaxTrackerScreenState extends State<IncomeTaxTrackerScreen> {
         final tags = List<String>.from(data['tags'] ?? []);
         double used = 0;
 
+        final categoryNameLower = name.toString().toLowerCase();
+
         for (var tx in transactionsSnap.docs) {
           final txData = tx.data();
           final desc = (txData['rawText'] ?? '').toString().toLowerCase();
+          final txCategoryLower =
+              (txData['categoryId'] ?? '').toString().toLowerCase();
+          final txIncomeTaxLower =
+              (txData['incomeTaxCategory'] ?? '').toString().toLowerCase();
 
-          if (tags.any((tag) => desc.contains(tag.toLowerCase()))) {
+          final matchesByTag = tags.any(
+            (tag) => desc.contains(tag.toLowerCase()),
+          );
+          final matchesByAssignedCategory =
+              txCategoryLower.isNotEmpty &&
+              txCategoryLower == categoryNameLower;
+
+          final matchesByTxnField = txIncomeTaxLower == categoryNameLower;
+
+          if (matchesByTag || matchesByAssignedCategory || matchesByTxnField) {
             final amt = (txData['amount'] ?? 0).toDouble();
             used += amt;
           }
@@ -165,5 +180,10 @@ class TaxDeductionCategory {
     required this.tags,
   });
 
-  double get usagePercent => (used / cap).clamp(0, 1);
+  double get usagePercent {
+    if (cap <= 0) {
+      return 0.0;
+    }
+    return ((used / cap).clamp(0, 1)) as double;
+  }
 }

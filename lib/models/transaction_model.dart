@@ -53,6 +53,7 @@ class TransactionModel {
   final String rawText;
   final DateTime timestamp;
   final String description;
+  final String? incomeTaxCategory; // NEW
 
   TransactionModel({
     required this.id,
@@ -61,6 +62,7 @@ class TransactionModel {
     required this.rawText,
     required this.timestamp,
     this.description = '',
+    this.incomeTaxCategory, // NEW
   });
 
   factory TransactionModel.fromFirestore(DocumentSnapshot doc) {
@@ -72,6 +74,7 @@ class TransactionModel {
       rawText: data['rawText'] ?? '',
       timestamp: (data['timestamp'] as Timestamp).toDate(),
       description: data['description'] ?? '',
+      incomeTaxCategory: data['incomeTaxCategory'], // NEW
     );
   }
 
@@ -80,8 +83,10 @@ class TransactionModel {
       'categoryId': categoryId,
       'amount': amount,
       'rawText': rawText,
-      'timestamp': FieldValue.serverTimestamp(),
+      // Persist the provided timestamp so month filters stay accurate
+      'timestamp': Timestamp.fromDate(timestamp),
       'description': description,
+      'incomeTaxCategory': incomeTaxCategory, // NEW
     };
   }
 }

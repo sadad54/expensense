@@ -192,4 +192,80 @@ class ModernBudgetService {
   //     String budgetId, String categoryId, double newSpentAmount) async {
   //   // ...
   // }
+
+  // Recompute the current budget's spent amounts from the canonical 'transactions' collection
+  Future<void> recomputeCurrentBudgetSpentFromTransactions(
+    String budgetId,
+  ) async {
+    if (_userId == null) throw Exception("User not logged in");
+
+    // Load budget period dates
+    final budgetDoc =
+        await _firestore
+            .collection('users')
+            .doc(_userId)
+            .collection('budgets')
+            .doc(budgetId)
+            .get();
+    if (!budgetDoc.exists) return;
+
+    final startTs = budgetDoc.data()?['startDate'] as Timestamp?;
+    final endTs = budgetDoc.data()?['endDate'] as Timestamp?;
+    if (startTs == null || endTs == null) return;
+
+    final DateTime startDate = startTs.toDate();
+    final DateTime endDate = DateTime(
+      endTs.toDate().year,
+      endTs.toDate().month,
+      endTs.toDate().day,
+      23,
+      59,
+      59,
+    );
+
+    // Aggregate spend by category from transactions (exclude incomes)
+    final txSnap =
+        await _firestore
+            .collection('users')
+            .doc(_userId)
+            .collection('transactions')
+            .where(
+              'timestamp',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+            )
+            .where(
+              'timestamp',
+              isLessThanOrEqualTo: Timestamp.fromDate(endDate),
+            )
+            .get();
+
+    final Map<String, double> categoryToSpent = {};
+    for (final doc in txSnap.docs) {
+      final data = doc.data();
+      final String categoryName =
+          (data['categoryName'] ?? data['categoryId'] ?? 'Other').toString();
+      final double amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+      if (!categoryName.toLowerCase().contains('income')) {
+        categoryToSpent[categoryName] =
+            (categoryToSpent[categoryName] ?? 0) + amount;
+      }
+    }
+
+    // Update each budget category's spentAmount to the aggregated value (or 0)
+    final categoriesRef = _firestore
+        .collection('users')
+        .doc(_userId)
+        .collection('budgets')
+        .doc(budgetId)
+        .collection('categories');
+    final catsSnap = await categoriesRef.get();
+
+    final WriteBatch batch = _firestore.batch();
+    for (final catDoc in catsSnap.docs) {
+      final name = (catDoc.data()['name'] ?? '').toString();
+      final double spent = categoryToSpent[name] ?? 0.0;
+      batch.update(catDoc.reference, {'spentAmount': spent});
+    }
+    await batch.commit();
+  }
 }

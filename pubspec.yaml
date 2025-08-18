@@ -50,6 +50,7 @@ dependencies:
   intl: ^0.20.2
   firebase_storage: ^12.4.5
   flutter_slidable: ^4.0.0
+  google_sign_in: ^6.2.1
   
   uuid: ^4.4.0
   percent_indicator: ^4.2.5
@@ -90,11 +91,7 @@ flutter:
     - assets/images/facebook.png
     - assets/images/google.png
     - assets/images/splash.png
-    - assets/tessdata/eng.traineddata
-    - assets/tessdata_config.json
-    - assets/tflite/model.tflite
-    - assets/tflite/labels.txt
-    - assets/tflite/word_index.json
+    
     
     
   # An image asset can refer to one or more resolution-specific "variants", see

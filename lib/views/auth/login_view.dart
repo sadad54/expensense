@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:exp_ocr/views/home/home_view.dart'; // Replace with your actual home screen
 import 'signup_view.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -17,6 +19,7 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   final _formKey = GlobalKey<FormState>();
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
@@ -39,6 +42,55 @@ class _LoginScreenState extends State<LoginScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text(e.message ?? 'Login failed')));
       }
+    }
+  }
+
+  Future<void> _loginWithGoogle() async {
+    try {
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return; // canceled
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
+      );
+      await _auth.signInWithCredential(credential);
+
+      // Ensure user document exists for downstream features
+      final user = _auth.currentUser;
+      if (user != null) {
+        final userDocRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid);
+        final userDoc = await userDocRef.get();
+        if (!userDoc.exists) {
+          await userDocRef.set({
+            'email': user.email,
+            'username': user.displayName ?? '',
+            'profileImage': user.photoURL,
+            'createdAt': FieldValue.serverTimestamp(),
+            'expenses': 0.0,
+          });
+        }
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Login successful!')));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HomeScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Google sign-in failed')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Google sign-in failed')));
     }
   }
 
@@ -72,6 +124,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 16),
+
+                // Google Sign-in Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: _loginWithGoogle,
+                    icon: const Icon(Icons.login),
+                    label: const Text('Continue with Google'),
+                  ),
+                ),
+                const SizedBox(height: 8),
 
                 // Password Field
                 TextFormField(

@@ -56,6 +56,12 @@ class ModernBudgetProvider with ChangeNotifier {
   Future<void> refreshBudget() async {
     print("Refreshing budget data...");
     await _initializeBudget(); // This will re-run the initialization logic
+    // Re-sync spent amounts with canonical transactions collection to avoid drift
+    if (_currentBudgetId != null) {
+      await _budgetService.recomputeCurrentBudgetSpentFromTransactions(
+        _currentBudgetId!,
+      );
+    }
   }
 
   void _listenToPeriod() {
@@ -162,6 +168,10 @@ class ModernBudgetProvider with ChangeNotifier {
         budgetId: _currentBudgetId!,
         transactionCategoryName: transactionCategoryName,
         amountToIncrement: transactionAmount,
+      );
+      // Also recompute totals from transactions to ensure parity with Home/Stats
+      await _budgetService.recomputeCurrentBudgetSpentFromTransactions(
+        _currentBudgetId!,
       );
       // UI will update via the stream from _listenToCategories
       print(

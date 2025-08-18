@@ -714,6 +714,7 @@
 //   }
 // }
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import 'package:exp_ocr/models/goal_model.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -752,6 +753,9 @@ class _HomeScreenState extends State<HomeScreen> {
     DateTime.now().month,
   );
 
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
+  _homeStatsSubscription; // realtime stats for current month
+
   // For consistent colors for categories
   final Map<String, Color> _categoryColors = {};
   final List<Color> _baseColors = [
@@ -779,7 +783,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _fetchAllData();
-    _fetchHomeScreenChartData(); // Fetch data for home screen charts
+    _listenToHomeStats(); // Realtime data for home screen charts
   }
 
   void _fetchAllData() {
@@ -848,19 +852,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // --- New method to fetch data for Home Screen charts (current month) ---
-  Future<void> _fetchHomeScreenChartData() async {
+  void _listenToHomeStats() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       if (mounted) setState(() => _chartsLoading = false);
       return;
     }
-    if (mounted) setState(() => _chartsLoading = true);
-
-    _categoryColors.clear(); // Reset colors on each fetch
+    setState(() => _chartsLoading = true);
+    _categoryColors.clear();
     _colorIndex = 0;
 
-    DateTime startDate = DateTime(_currentMonth.year, _currentMonth.month, 1);
-    DateTime endDate = DateTime(
+    final DateTime startDate = DateTime(
+      _currentMonth.year,
+      _currentMonth.month,
+      1,
+    );
+    final DateTime endDate = DateTime(
       _currentMonth.year,
       _currentMonth.month + 1,
       0,
@@ -869,56 +876,53 @@ class _HomeScreenState extends State<HomeScreen> {
       59,
     );
 
-    try {
-      final querySnapshot =
-          await FirebaseFirestore.instance
-              .collection("users")
-              .doc(uid)
-              .collection(
-                "generalTransactions",
-              ) // Ensure this is your correct transactions collection
-              .where(
-                "timestamp",
-                isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
-              )
-              .where(
-                "timestamp",
-                isLessThanOrEqualTo: Timestamp.fromDate(endDate),
-              )
-              .get();
-
-      final Map<String, double> totals = {};
-      double totalSpent = 0;
-
-      for (var doc in querySnapshot.docs) {
-        final data = doc.data();
-        final String categoryName = data['categoryName'] as String? ?? 'Other';
-        final double amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
-        // Assuming all transactions in 'generalTransactions' are expenses for this chart
-        // If you have a 'type' field (income/expense), filter for expenses here.
-        // For simplicity, we'll assume all are spendings for the pie chart.
-        // if (data['type'] == 'expense' || data['type'] == null) { // Example if you have a type field
-        totals[categoryName] = (totals[categoryName] ?? 0) + amount;
-        totalSpent += amount;
-        // }
-      }
-      if (mounted) {
-        setState(() {
-          _homeScreenCategoryTotals = totals;
-          _homeScreenTotalSpentForMonth = totalSpent;
-          _chartsLoading = false;
-        });
-      }
-    } catch (e) {
-      print("Error fetching home screen chart data: $e");
-      if (mounted) {
-        setState(() {
-          _chartsLoading = false;
-          _homeScreenCategoryTotals = {};
-          _homeScreenTotalSpentForMonth = 0;
-        });
-      }
-    }
+    _homeStatsSubscription?.cancel();
+    _homeStatsSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('transactions')
+        .where(
+          'timestamp',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+        )
+        .where('timestamp', isLessThanOrEqualTo: Timestamp.fromDate(endDate))
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .listen(
+          (snapshot) {
+            final Map<String, double> totals = {};
+            double totalSpent = 0;
+            for (final doc in snapshot.docs) {
+              final data = doc.data();
+              final String categoryName =
+                  (data['categoryName'] ?? data['categoryId'] ?? 'Other')
+                      .toString();
+              final double amount = (data['amount'] as num?)?.toDouble() ?? 0.0;
+              // Exclude income from spending stats to align with budget progress
+              if (!categoryName.toLowerCase().contains('income')) {
+                totals[categoryName] = (totals[categoryName] ?? 0) + amount;
+                totalSpent += amount;
+              }
+            }
+            if (mounted) {
+              setState(() {
+                _homeScreenCategoryTotals = totals;
+                _homeScreenTotalSpentForMonth = totalSpent;
+                _chartsLoading = false;
+              });
+            }
+          },
+          onError: (e) {
+            print('Error listening to home stats: $e');
+            if (mounted) {
+              setState(() {
+                _chartsLoading = false;
+                _homeScreenCategoryTotals = {};
+                _homeScreenTotalSpentForMonth = 0;
+              });
+            }
+          },
+        );
   }
   // --- End new method ---
 
@@ -962,7 +966,7 @@ class _HomeScreenState extends State<HomeScreen> {
               () => _selectedIndex = 0,
             ); // Reset to home visually after scan
           _fetchAllData(); // Refresh data after potential new transaction
-          _fetchHomeScreenChartData();
+          _listenToHomeStats();
         });
         break;
       case 4:
@@ -989,6 +993,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _homeStatsSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _fetchBalanceAndSummary() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
@@ -1005,7 +1015,7 @@ class _HomeScreenState extends State<HomeScreen> {
           await FirebaseFirestore.instance
               .collection('users')
               .doc(uid)
-              .collection('generalTransactions')
+              .collection('transactions')
               .where(
                 'timestamp',
                 isGreaterThanOrEqualTo: Timestamp.fromDate(start),
@@ -1016,7 +1026,8 @@ class _HomeScreenState extends State<HomeScreen> {
       double expense = 0;
       for (var doc in query.docs) {
         final data = doc.data();
-        final category = data['categoryName'] ?? '';
+        final category =
+            (data['categoryName'] ?? data['categoryId'] ?? '').toString();
         final amount = (data['amount'] ?? 0).toDouble();
 
         if (!category.toLowerCase().contains('income')) {
@@ -1063,8 +1074,8 @@ class _HomeScreenState extends State<HomeScreen> {
               .collection('users')
               .doc(uid)
               .collection(
-                'generalTransactions',
-              ) // Reading from generalTransactions
+                'transactions',
+              ) // Reading from transactions to reflect scanned saves
               .orderBy('timestamp', descending: true)
               .limit(3)
               .get();
@@ -1075,6 +1086,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 final data = doc.data();
                 // Assuming all are expenses for display purposes here unless 'type' is present
                 data['type'] = data['type'] ?? 'expense';
+                // Map category name for UI from stored categoryId
+                if (data['categoryName'] == null &&
+                    data['categoryId'] != null) {
+                  data['categoryName'] = data['categoryId'];
+                }
                 return data..['id'] = doc.id;
               }).toList();
         });
@@ -1211,7 +1227,7 @@ class _HomeScreenState extends State<HomeScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           _fetchAllData();
-          _fetchHomeScreenChartData();
+          _listenToHomeStats();
         },
         backgroundColor: theme.colorScheme.surface,
         color: theme.colorScheme.primary,

@@ -6,6 +6,25 @@ import 'package:provider/provider.dart';
 import '../viewmodels/budget_viewmodel.dart';
 import 'package:flutter/material.dart';
 
+Future<String?> detectIncomeTaxCategoryFromText(String rawText) async {
+  try {
+    final snap =
+        await FirebaseFirestore.instance
+            .collection('income_tax_categories')
+            .get();
+    final lower = rawText.toLowerCase();
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      final name = (data['name'] ?? '').toString();
+      final tags = List<String>.from(data['tags'] ?? []);
+      if (name.isEmpty) continue;
+      final matches = tags.any((t) => lower.contains(t.toLowerCase()));
+      if (matches) return name;
+    }
+  } catch (_) {}
+  return null;
+}
+
 Future<void> saveTransactionAndUpdateBudget({
   required BuildContext context,
   required String categoryName,
@@ -16,6 +35,10 @@ Future<void> saveTransactionAndUpdateBudget({
   final uid = FirebaseAuth.instance.currentUser?.uid;
   if (uid == null) return;
 
+  final matchedIncomeTaxCategory = await detectIncomeTaxCategoryFromText(
+    rawText,
+  );
+
   final transaction = TransactionModel(
     id: '',
     categoryId: categoryName,
@@ -23,6 +46,7 @@ Future<void> saveTransactionAndUpdateBudget({
     rawText: rawText,
     timestamp: timestamp,
     description: rawText,
+    incomeTaxCategory: matchedIncomeTaxCategory,
   );
 
   final docRef = await FirebaseFirestore.instance

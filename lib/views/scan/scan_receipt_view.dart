@@ -38,6 +38,52 @@ Future<File> preprocessImage(File file) async {
   return processedFile;
 }
 
+// Ensure the image file is smaller than the OCR API limit (1 MB)
+// by adaptively lowering JPEG quality and, if needed, scaling down.
+Future<File> _compressUnderLimit(
+  File file, {
+  int maxBytes = 1000 * 1024,
+}) async {
+  final bytes = await file.readAsBytes();
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return file;
+
+  img.Image image = img.bakeOrientation(decoded);
+  int quality = 85;
+  int currentWidth = image.width;
+
+  List<int> jpg = img.encodeJpg(image, quality: quality);
+
+  while (jpg.length > maxBytes) {
+    if (quality > 55) {
+      quality -= 10;
+    } else {
+      // Reduce dimensions when quality is already low
+      currentWidth = (currentWidth * 0.85).floor();
+      if (currentWidth < 800) break; // safety bound
+      final scale = currentWidth / image.width;
+      image = img.copyResize(
+        image,
+        width: currentWidth,
+        height: (image.height * scale).floor(),
+      );
+      quality = 80; // bump quality a bit after resizing
+    }
+    jpg = img.encodeJpg(image, quality: quality);
+  }
+
+  final out = await file.rename('${file.path}.tmp');
+  final newFile = File(file.path);
+  await newFile.writeAsBytes(jpg, flush: true);
+  // best effort cleanup
+  if (await out.exists()) {
+    try {
+      await out.delete();
+    } catch (_) {}
+  }
+  return newFile;
+}
+
 class ScanReceiptScreen extends StatefulWidget {
   const ScanReceiptScreen({super.key});
 
@@ -67,7 +113,8 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
           _statusMessage = 'Processing image...';
         });
         final preprocessed = await preprocessImage(_image!);
-        await _uploadImageToOCRSpace(preprocessed);
+        final bounded = await _compressUnderLimit(preprocessed);
+        await _uploadImageToOCRSpace(bounded);
       }
     } catch (e) {
       setState(() {
@@ -89,7 +136,7 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
           ..fields['apikey'] = ocrApiKey
           ..fields['language'] = 'eng'
           ..fields['isOverlayRequired'] = 'false'
-          ..fields['OCREngine'] = '1'
+          ..fields['OCREngine'] = '2'
           ..fields['scale'] = 'true'
           ..fields['isTable'] = 'true'
           ..fields['detectOrientation'] = 'true'
@@ -99,10 +146,109 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
 
     try {
       final response = await request.send();
-      final result = await http.Response.fromStream(response);
+      var result = await http.Response.fromStream(response);
 
       print('🛰️ OCR Response Code: ${result.statusCode}');
       print('📥 OCR Raw Body: ${result.body}');
+
+      // If still too large, compress further and retry once
+      final bodyLower = result.body.toLowerCase();
+      final isTooBig =
+          result.statusCode == 413 ||
+          bodyLower.contains('file size limit') ||
+          bodyLower.contains('file too large') ||
+          bodyLower.contains('exceeds the maximum permissible file size');
+      if (isTooBig) {
+        setState(() {
+          _statusMessage = 'Optimizing image size...';
+        });
+        final tighter = await _compressUnderLimit(
+          imageFile,
+          maxBytes: 900 * 1024,
+        );
+        final retryReq =
+            http.MultipartRequest('POST', uri)
+              ..fields['apikey'] = ocrApiKey
+              ..fields['language'] = 'eng'
+              ..fields['isOverlayRequired'] = 'false'
+              ..fields['OCREngine'] = '2'
+              ..fields['scale'] = 'true'
+              ..fields['isTable'] = 'true'
+              ..fields['detectOrientation'] = 'true'
+              ..files.add(
+                await http.MultipartFile.fromPath('file', tighter.path),
+              );
+        final retryStream = await retryReq.send();
+        final retryResult = await http.Response.fromStream(retryStream);
+        print('🛰️ OCR Retry Response Code: ${retryResult.statusCode}');
+        print('📥 OCR Retry Raw Body: ${retryResult.body}');
+        final retryJson = json.decode(retryResult.body);
+        if (retryJson['IsErroredOnProcessing'] == false &&
+            retryJson['ParsedResults'] != null &&
+            retryJson['ParsedResults'].isNotEmpty) {
+          final parsedText = retryJson['ParsedResults'][0]['ParsedText'] ?? '';
+          final parsedDetails = extractDataFromReceipt(parsedText.trim());
+          String transactionCategoryName = hybridCategoryMatch(
+            parsedText.trim(),
+          );
+          if (transactionCategoryName == "Uncategorized") {
+            final pickedCategory = await _showTransactionCategoryPicker(
+              context,
+            );
+            if (pickedCategory != null) {
+              transactionCategoryName = pickedCategory;
+            } else {
+              setState(() {
+                _extractedText = 'Raw Text:\n${parsedText.trim()}';
+                _statusMessage = '⚠️ Transaction Uncategorized.';
+                _loading = false;
+              });
+              return;
+            }
+          }
+          final amount =
+              double.tryParse(
+                parsedDetails['amount'].toString().replaceAll(
+                  RegExp(r'[^0-9.]'),
+                  '',
+                ),
+              ) ??
+              0.0;
+          setState(() {
+            _extractedText =
+                'Vendor: ${parsedDetails['vendor']}\nAmount: \$${amount.toStringAsFixed(2)}\nDate: ${parsedDetails['date']}\nCategory: $transactionCategoryName\n---\nRaw Text:\n${parsedText.trim()}';
+            _statusMessage = '✅ Scan successful!';
+          });
+          if (transactionCategoryName != "Uncategorized" && amount > 0) {
+            await saveTransactionAndUpdateBudget(
+              context: context,
+              categoryName: transactionCategoryName,
+              amount: amount,
+              rawText: parsedText.trim(),
+              timestamp:
+                  DateTime.tryParse(parsedDetails['date'] ?? '') ??
+                  DateTime.now(),
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  "✅ \$${amount.toStringAsFixed(2)} logged under '$transactionCategoryName'",
+                ),
+              ),
+            );
+            if (_isIncomeTaxRelevant(transactionCategoryName)) {
+              Provider.of<TaxCategoryNotifier>(
+                context,
+                listen: false,
+              ).refresh();
+            }
+          }
+          return;
+        } else {
+          // fall through to normal error handling with retry payload
+          result = retryResult;
+        }
+      }
 
       final jsonData = json.decode(result.body);
 

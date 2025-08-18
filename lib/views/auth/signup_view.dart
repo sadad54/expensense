@@ -19,10 +19,12 @@ class _SignupScreenState extends State<SignupScreen>
     with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _usernameController = TextEditingController();
   final _dobController = TextEditingController();
   File? _profileImage;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   final _formKey = GlobalKey<FormState>();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -71,6 +73,13 @@ class _SignupScreenState extends State<SignupScreen>
 
   void _signup() async {
     if (_formKey.currentState!.validate()) {
+      if (_passwordController.text.trim() !=
+          _confirmPasswordController.text.trim()) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+        return;
+      }
       try {
         final userCredential = await _auth.createUserWithEmailAndPassword(
           email: _emailController.text.trim(),
@@ -198,6 +207,37 @@ class _SignupScreenState extends State<SignupScreen>
                     validator: (value) {
                       if (value == null || value.length < 6) {
                         return 'Minimum 6 characters required';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Confirm Password
+                  TextFormField(
+                    controller: _confirmPasswordController,
+                    obscureText: _obscureConfirmPassword,
+                    decoration: InputDecoration(
+                      labelText: 'Confirm Password',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirmPassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscureConfirmPassword = !_obscureConfirmPassword;
+                          });
+                        },
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please confirm your password';
+                      }
+                      if (value != _passwordController.text) {
+                        return 'Passwords do not match';
                       }
                       return null;
                     },
