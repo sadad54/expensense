@@ -207,7 +207,6 @@
 //   }
 // } // Start with TransactionScreen
 import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
-import 'package:exp_ocr/views/dummy_data_view.dart';
 import 'package:exp_ocr/views/goals/goals_view.dart';
 import 'package:exp_ocr/views/home/home_view.dart';
 import 'package:exp_ocr/views/budgets/modern_budget_view.dart';
@@ -227,7 +226,9 @@ import 'package:exp_ocr/views/settings_view.dart';
 import 'package:exp_ocr/viewmodels/theme_viewmodel.dart';
 import 'package:exp_ocr/views/income_tax_view.dart';
 import 'package:exp_ocr/views/scan/scan_receipt_view.dart';
+import 'package:exp_ocr/views/scans/scans_view.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -254,12 +255,13 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
 
-    const Color primaryBackgroundColor = Color(0xFF1C1C1E);
+    const Color primaryBackgroundColor = Color(0xFF0E0E10);
     const Color surfaceColor = Color(0xFF2C2C2E);
     const Color primaryAccentColor = Colors.tealAccent;
     const Color secondaryAccentColor = Colors.redAccent;
 
     final baseTheme = ThemeData(
+      useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: primaryBackgroundColor,
       primaryColor: primaryAccentColor,
@@ -309,15 +311,7 @@ class MyApp extends StatelessWidget {
         backgroundColor: primaryAccentColor,
         foregroundColor: Colors.black,
       ),
-      textTheme: const TextTheme(
-        titleLarge: TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-          fontSize: 24,
-        ),
-        bodyMedium: TextStyle(color: Colors.white),
-        labelSmall: TextStyle(color: Colors.grey),
-      ).apply(bodyColor: Colors.white, displayColor: Colors.white),
+      textTheme: ThemeData.dark().textTheme,
       datePickerTheme: DatePickerThemeData(
         backgroundColor: surfaceColor,
         headerBackgroundColor: primaryBackgroundColor,
@@ -328,9 +322,26 @@ class MyApp extends StatelessWidget {
         yearForegroundColor: MaterialStateProperty.all(Colors.white),
         weekdayStyle: TextStyle(color: Colors.grey[400]),
       ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
     );
 
     final lightTheme = ThemeData(
+      useMaterial3: true,
       brightness: Brightness.light,
       primaryColor: primaryAccentColor,
       scaffoldBackgroundColor: Colors.white,
@@ -361,12 +372,21 @@ class MyApp extends StatelessWidget {
         elevation: 1,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      textTheme: const TextTheme(
-        bodyMedium: TextStyle(color: Colors.black),
-        titleLarge: TextStyle(
-          color: Colors.black,
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
+      textTheme: ThemeData.light().textTheme,
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
     );
@@ -374,8 +394,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Expense Tracker',
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      theme: lightTheme,
-      darkTheme: baseTheme,
+      theme: lightTheme.copyWith(
+        textTheme: GoogleFonts.interTextTheme(lightTheme.textTheme),
+      ),
+      darkTheme: baseTheme.copyWith(
+        textTheme: GoogleFonts.interTextTheme(baseTheme.textTheme),
+      ),
       debugShowCheckedModeBanner: false,
       initialRoute: '/',
       routes: {
@@ -386,6 +410,7 @@ class MyApp extends StatelessWidget {
         '/goals': (context) => const GoalsScreen(),
         '/budgets': (context) => const ModernBudgetScreen(),
         '/scan': (context) => ScanReceiptScreen(),
+        '/scans': (context) => const ScansView(),
         '/stats': (context) => StatsScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/incomeTax': (context) => IncomeTaxTrackerScreen(),

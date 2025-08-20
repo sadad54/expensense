@@ -1,17 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:exp_ocr/util/category_hybrid_matcher.dart';
 import 'package:exp_ocr/util/receipt_parser.dart';
 import 'package:exp_ocr/util/transaction_utils.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
-import 'package:provider/provider.dart';
-import 'package:exp_ocr/viewmodels/budget_viewmodel.dart';
 import 'package:provider/provider.dart';
 import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
 
@@ -494,101 +490,104 @@ ${parsedText.trim()}
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Scan Receipt")),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (_image != null && _image!.existsSync())
-              Expanded(flex: 2, child: Image.file(_image!, fit: BoxFit.contain))
-            else if (_image != null)
-              const Text(
-                "⚠️ Failed to load image preview.",
-                style: TextStyle(color: Colors.redAccent),
-              ),
-
-            if (_image == null)
-              Container(
-                height: 200,
-                decoration: BoxDecoration(
-                  color: Colors.grey[800],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey[700]!),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_image != null && _image!.existsSync())
+                AspectRatio(
+                  aspectRatio: 4 / 3,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(_image!, fit: BoxFit.contain),
+                  ),
+                )
+              else if (_image != null)
+                const Text(
+                  "⚠️ Failed to load image preview.",
+                  style: TextStyle(color: Colors.redAccent),
+                )
+              else
+                Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey[700]!),
+                  ),
+                  child: Center(
+                    child: Text(
+                      "Image preview will appear here",
+                      style: TextStyle(color: Colors.grey[400]),
+                    ),
+                  ),
                 ),
-                child: Center(
+
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed:
+                        _loading ? null : () => _pickImage(ImageSource.camera),
+                    icon: const Icon(Icons.camera_alt),
+                    label: const Text("Camera"),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed:
+                        _loading ? null : () => _pickImage(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library),
+                    label: const Text("Gallery"),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 48),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (_loading)
+                const Center(child: CircularProgressIndicator())
+              else if (_statusMessage.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
                   child: Text(
-                    "Image preview will appear here",
-                    style: TextStyle(color: Colors.grey[400]),
+                    _statusMessage,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.amber),
                   ),
                 ),
-              ),
 
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton.icon(
-                  onPressed:
-                      _loading ? null : () => _pickImage(ImageSource.camera),
-                  icon: const Icon(Icons.camera_alt),
-                  label: const Text("Camera"),
-                ),
-                ElevatedButton.icon(
-                  onPressed:
-                      _loading ? null : () => _pickImage(ImageSource.gallery),
-                  icon: const Icon(Icons.photo_library),
-                  label: const Text("Gallery"),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_loading)
-              const Center(child: CircularProgressIndicator())
-            else if (_statusMessage.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Text(
-                  _statusMessage,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.amber),
-                ),
-              ),
-
-            if (_extractedText.isNotEmpty)
-              Expanded(
-                flex: 3,
+              SizedBox(
+                height: 260,
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.grey[850],
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      _extractedText,
-                      style: const TextStyle(fontSize: 14, height: 1.5),
-                    ),
-                  ),
-                ),
-              )
-            else if (!_loading)
-              Expanded(
-                flex: 3,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[850],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      "Scanned details will appear here.",
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ),
+                  child:
+                      _extractedText.isNotEmpty
+                          ? SingleChildScrollView(
+                            child: Text(
+                              _extractedText,
+                              style: const TextStyle(fontSize: 14, height: 1.5),
+                            ),
+                          )
+                          : const Center(
+                            child: Text(
+                              "Scanned details will appear here.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ),
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );

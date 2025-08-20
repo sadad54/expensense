@@ -49,11 +49,15 @@ Future<void> saveTransactionAndUpdateBudget({
     incomeTaxCategory: matchedIncomeTaxCategory,
   );
 
-  final docRef = await FirebaseFirestore.instance
+  await FirebaseFirestore.instance
       .collection('users')
       .doc(uid)
       .collection('transactions')
-      .add(transaction.toMap());
+      .add({
+        ...transaction.toMap(),
+        // Store the scan time separately from the receipt timestamp
+        'scannedAt': FieldValue.serverTimestamp(),
+      });
 
   final budgetProvider = Provider.of<ModernBudgetProvider>(
     context,

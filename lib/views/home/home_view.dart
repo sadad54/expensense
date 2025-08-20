@@ -721,7 +721,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart'; // Import fl_chart
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'dart:math'; // For colors if needed
+import 'package:exp_ocr/widgets/tappable_card.dart';
 
 // Remove Placeholder Chart Widgets if they are in this file.
 // We will build actual charts.
@@ -1214,13 +1214,24 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
+      backgroundColor: const Color(0xFF0E0E10),
       appBar: AppBar(
         backgroundColor: theme.appBarTheme.backgroundColor,
         elevation: theme.appBarTheme.elevation,
-        title: Text(
-          'ExpenSense', // Your app name
-          style: theme.appBarTheme.titleTextStyle,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Image.asset(
+                'assets/images/Untitled.png',
+                height: 28,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text('ExpenSense', style: theme.appBarTheme.titleTextStyle),
+          ],
         ),
         centerTitle: true,
       ),
@@ -1383,7 +1394,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Card(
       color: const Color(0xFF1E1E1E),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      elevation: 4,
+      elevation: 8,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -1443,6 +1454,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 8),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pushNamed(context, '/scans');
+              },
+              icon: const Icon(
+                Icons.document_scanner_outlined,
+                color: Colors.black87,
+                size: 20,
+              ),
+              label: Text(
+                "Scans",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                  fontSize: 13,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.tealAccent,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -1462,7 +1502,7 @@ class _HomeScreenState extends State<HomeScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(15),
               ),
-              elevation: 3,
+              elevation: 6,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   vertical: 20,
@@ -1507,7 +1547,7 @@ class _HomeScreenState extends State<HomeScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(15),
             ),
-            elevation: 3,
+            elevation: 6,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
               child: Column(
@@ -1545,92 +1585,96 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- New method to build the stats preview section ---
   Widget _buildStatsPreviewSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return TappableCard(
+      onTap: () => _onTabTapped(2),
+      color: const Color(0xFF1C1C1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 4,
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "📊 Current Month's Stats",
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            TextButton(
-              onPressed: () => _onTabTapped(2), // Navigate to full StatsScreen
-              child: Text(
-                "View All",
-                style: GoogleFonts.poppins(
-                  color: Colors.tealAccent,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        if (_chartsLoading)
-          const SizedBox(
-            height: 180,
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (_homeScreenCategoryTotals.isEmpty)
-          SizedBox(
-            height: 180,
-            child: Center(
-              child: Text(
-                "No spending data for this month yet.",
-                style: GoogleFonts.poppins(color: Colors.grey[400]),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          )
-        else
-          SizedBox(
-            height: 180, // Adjusted height for previews
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Preview Pie Chart
-                SizedBox(
-                  width: 200, // Fixed width for preview chart
-                  height: 180,
-                  child: Column(
-                    children: [
-                      Expanded(
-                        child: PieChart(
-                          PieChartData(
-                            sections: _buildHomeScreenPieSections(),
-                            centerSpaceRadius: 40, // Make it a donut
-                            sectionsSpace: 2,
-                            startDegreeOffset: -90,
-
-                            // Add swap animations from your StatsScreen if fl_chart version is correct
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        "Spending Breakdown",
-                        style: GoogleFonts.poppins(
-                          fontSize: 11,
-                          color: Colors.grey[300],
-                        ),
-                      ),
-                    ],
+                Text(
+                  "📊 Current Month's Stats",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 12),
-                // Preview Bar Chart (Top 3 categories)
-                _buildHomeScreenBarChartPreview(),
+                // Text(
+                //   "Tap to open",
+                //   style: GoogleFonts.poppins(
+                //     color: Colors.tealAccent,
+                //     fontSize: 12,
+                //     fontWeight: FontWeight.w500,
+                //   ),
+                //),
               ],
             ),
-          ),
-      ],
+            const SizedBox(height: 12),
+            if (_chartsLoading)
+              const SizedBox(
+                height: 180,
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_homeScreenCategoryTotals.isEmpty)
+              SizedBox(
+                height: 180,
+                child: Center(
+                  child: Text(
+                    "No spending data for this month yet.",
+                    style: GoogleFonts.poppins(color: Colors.grey[400]),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 180,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    SizedBox(
+                      width: 220,
+                      height: 180,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: PieChart(
+                              PieChartData(
+                                sections: _buildHomeScreenPieSections(),
+                                centerSpaceRadius: 40,
+                                sectionsSpace: 2,
+                                startDegreeOffset: -90,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            "Spending Breakdown",
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: Colors.grey[300],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _buildHomeScreenBarChartPreview(),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1783,188 +1827,180 @@ class _HomeScreenState extends State<HomeScreen> {
   // --- End new method ---
 
   Widget _buildRecentTransactionsCard() {
-    return GestureDetector(
-      onTap: () => _onTabTapped(1), // Use _onTabTapped for consistency
-      child: Card(
-        color: const Color(0xFF1C1C1E), // Slightly different dark shade
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        margin: const EdgeInsets.only(top: 12),
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "💳 Recent Transactions",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+    return TappableCard(
+      onTap: () => _onTabTapped(1),
+      color: const Color(0xFF1C1C1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      margin: const EdgeInsets.only(top: 12),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "💳 Recent Transactions",
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 10),
-              if (_recentTransactions.isEmpty &&
-                  !_chartsLoading) // Also check loading
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10.0),
-                  child: Text(
-                    "No recent transactions found.",
-                    style: GoogleFonts.poppins(color: Colors.grey[400]),
+            ),
+            const SizedBox(height: 10),
+            if (_recentTransactions.isEmpty && !_chartsLoading)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                child: Text(
+                  "No recent transactions found.",
+                  style: GoogleFonts.poppins(color: Colors.grey[400]),
+                ),
+              )
+            else if (_chartsLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10.0),
+                child: SizedBox(
+                  height: 30,
+                  child: Center(child: LinearProgressIndicator(minHeight: 2)),
+                ),
+              )
+            else
+              ..._recentTransactions.map(
+                (tx) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  leading: Icon(
+                    tx['type'] == 'income'
+                        ? Icons.arrow_downward_rounded
+                        : Icons.arrow_upward_rounded,
+                    color:
+                        tx['type'] == 'income'
+                            ? Colors.greenAccent[400]
+                            : Colors.redAccent[200],
                   ),
-                )
-              else if (_chartsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10.0),
-                  child: SizedBox(
-                    height: 30,
-                    child: Center(child: LinearProgressIndicator(minHeight: 2)),
+                  title: Text(
+                    tx['categoryName'] ?? "Unknown Category",
+                    style: GoogleFonts.poppins(
+                      color: Colors.white.withOpacity(0.9),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                )
-              else
-                ..._recentTransactions.map(
-                  (tx) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    leading: Icon(
-                      // Determine icon based on 'type' or category heuristics
-                      tx['type'] == 'income'
-                          ? Icons.arrow_downward_rounded
-                          : Icons.arrow_upward_rounded,
+                  subtitle: Text(
+                    tx['timestamp'] != null
+                        ? DateFormat.yMMMd().add_jm().format(
+                          (tx['timestamp'] as Timestamp).toDate(),
+                        )
+                        : "No date",
+                    style: GoogleFonts.poppins(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                  ),
+                  trailing: Text(
+                    "${tx['type'] == 'income' ? '+' : '-'}MYR ${(tx['amount'] ?? 0.0).toStringAsFixed(2)}",
+                    style: GoogleFonts.poppins(
                       color:
                           tx['type'] == 'income'
                               ? Colors.greenAccent[400]
                               : Colors.redAccent[200],
-                    ),
-                    title: Text(
-                      tx['categoryName'] ??
-                          "Unknown Category", // Using categoryName
-                      style: GoogleFonts.poppins(
-                        color: Colors.white.withOpacity(0.9),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    subtitle: Text(
-                      // Ensure timestamp is not null before formatting
-                      tx['timestamp'] != null
-                          ? DateFormat.yMMMd().add_jm().format(
-                            (tx['timestamp'] as Timestamp).toDate(),
-                          )
-                          : "No date",
-                      style: GoogleFonts.poppins(
-                        color: Colors.grey[500],
-                        fontSize: 12,
-                      ),
-                    ),
-                    trailing: Text(
-                      "${tx['type'] == 'income' ? '+' : '-'}MYR ${(tx['amount'] ?? 0.0).toStringAsFixed(2)}",
-                      style: GoogleFonts.poppins(
-                        color:
-                            tx['type'] == 'income'
-                                ? Colors.greenAccent[400]
-                                : Colors.redAccent[200],
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
   }
 
   Widget _buildBudgetPreviewCard() {
-    return GestureDetector(
-      onTap: () => _onTabTapped(5), // Use _onTabTapped
-      child: Card(
-        color: const Color(0xFF1C1C1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        margin: const EdgeInsets.only(top: 12),
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "💼 Budget Overview (Current Month)",
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
+    return TappableCard(
+      onTap: () => _onTabTapped(5),
+      color: const Color(0xFF1C1C1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      margin: const EdgeInsets.only(top: 12),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "💼 Budget Overview (Current Month)",
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
-              const SizedBox(height: 10),
-              if (_budgets.isEmpty && !_chartsLoading)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 10.0),
-                  child: Text(
-                    "No budgets set up for this month yet.",
-                    style: GoogleFonts.poppins(color: Colors.grey[400]),
-                  ),
-                )
-              else if (_chartsLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10.0),
-                  child: SizedBox(
-                    height: 30,
-                    child: Center(child: LinearProgressIndicator(minHeight: 2)),
-                  ),
-                )
-              else
-                ..._budgets.map((budget) {
-                  double spent = (budget['spentAmount'] ?? 0.0).toDouble();
-                  double allocated =
-                      (budget['allocatedAmount'] ?? 0.0).toDouble();
-                  double progress =
-                      allocated > 0 ? (spent / allocated).clamp(0.0, 1.0) : 0.0;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              budget['name'] ?? "Unnamed Budget",
-                              style: GoogleFonts.poppins(
-                                color: Colors.white.withOpacity(0.9),
-                                fontWeight: FontWeight.w500,
-                              ),
+            ),
+            const SizedBox(height: 10),
+            if (_budgets.isEmpty && !_chartsLoading)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                child: Text(
+                  "No budgets set up for this month yet.",
+                  style: GoogleFonts.poppins(color: Colors.grey[400]),
+                ),
+              )
+            else if (_chartsLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 10.0),
+                child: SizedBox(
+                  height: 30,
+                  child: Center(child: LinearProgressIndicator(minHeight: 2)),
+                ),
+              )
+            else
+              ..._budgets.map((budget) {
+                double spent = (budget['spentAmount'] ?? 0.0).toDouble();
+                double allocated =
+                    (budget['allocatedAmount'] ?? 0.0).toDouble();
+                double progress =
+                    allocated > 0 ? (spent / allocated).clamp(0.0, 1.0) : 0.0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            budget['name'] ?? "Unnamed Budget",
+                            style: GoogleFonts.poppins(
+                              color: Colors.white.withOpacity(0.9),
+                              fontWeight: FontWeight.w500,
                             ),
-                            Text(
-                              "${NumberFormat.currency(locale: 'en_MY', symbol: '').format(spent)} / ${NumberFormat.currency(locale: 'en_MY', symbol: 'MYR ').format(allocated)}",
-                              style: GoogleFonts.poppins(
-                                color: Colors.tealAccent.shade200,
-                                fontWeight: FontWeight.w500,
-                                fontSize: 13,
-                              ),
+                          ),
+                          Text(
+                            "${NumberFormat.currency(locale: 'en_MY', symbol: '').format(spent)} / ${NumberFormat.currency(locale: 'en_MY', symbol: 'MYR ').format(allocated)}",
+                            style: GoogleFonts.poppins(
+                              color: Colors.tealAccent.shade200,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: progress,
-                          backgroundColor: Colors.grey[700],
-                          color: (budget['colorHex'] != null
-                                  ? Color(
-                                    int.parse(budget['colorHex'], radix: 16),
-                                  )
-                                  : Colors.tealAccent)
-                              .withOpacity(0.7),
-                          minHeight: 5,
-                          borderRadius: BorderRadius.circular(2.5),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-            ],
-          ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: Colors.grey[700],
+                        color: (budget['colorHex'] != null
+                                ? Color(
+                                  int.parse(budget['colorHex'], radix: 16),
+                                )
+                                : Colors.tealAccent)
+                            .withOpacity(0.7),
+                        minHeight: 5,
+                        borderRadius: BorderRadius.circular(2.5),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+          ],
         ),
       ),
     );
@@ -1972,52 +2008,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildGoalCard() {
     if (_goal == null) {
-      return GestureDetector(
+      return TappableCard(
         onTap: () => Navigator.pushNamed(context, '/goals'),
-        child: Card(
-          color: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
-          margin: const EdgeInsets.only(top: 12),
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "🎯 Goal Progress",
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  "No active goal set. Tap to add one!",
-                  style: GoogleFonts.poppins(color: Colors.grey[400]),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    final double progress = _goal!.progress;
-    final double saved = _goal!.currentAmount;
-    final double target = _goal!.targetAmount;
-    final String title = _goal!.goalName;
-
-    return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/goals'),
-      child: Card(
         color: const Color(0xFF1C1C1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         margin: const EdgeInsets.only(top: 12),
-        elevation: 2,
+        elevation: 4,
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -2031,47 +2027,81 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
-                title,
-                style: GoogleFonts.poppins(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              LinearProgressIndicator(
-                value: progress,
-                backgroundColor: Colors.grey[700],
-                color: Colors.tealAccent,
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "MYR ${saved.toStringAsFixed(2)} / ${target.toStringAsFixed(2)}",
-                    style: GoogleFonts.poppins(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                  Text(
-                    "${(progress * 100).toStringAsFixed(0)}%",
-                    style: GoogleFonts.poppins(
-                      color: Colors.tealAccent,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                "No active goal set. Tap to add one!",
+                style: GoogleFonts.poppins(color: Colors.grey[400]),
               ),
             ],
           ),
+        ),
+      );
+    }
+
+    final double progress = _goal!.progress;
+    final double saved = _goal!.currentAmount;
+    final double target = _goal!.targetAmount;
+    final String title = _goal!.goalName;
+
+    return TappableCard(
+      onTap: () => Navigator.pushNamed(context, '/goals'),
+      color: const Color(0xFF1C1C1E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      margin: const EdgeInsets.only(top: 12),
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "🎯 Goal Progress",
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.grey[700],
+              color: Colors.tealAccent,
+              minHeight: 8,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "MYR ${saved.toStringAsFixed(2)} / ${target.toStringAsFixed(2)}",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withOpacity(0.7),
+                    fontSize: 12,
+                  ),
+                ),
+                Text(
+                  "${(progress * 100).toStringAsFixed(0)}%",
+                  style: GoogleFonts.poppins(
+                    color: Colors.tealAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );

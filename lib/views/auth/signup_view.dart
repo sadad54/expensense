@@ -13,6 +13,7 @@ import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:exp_ocr/views/home/home_view.dart';
+import 'package:exp_ocr/widgets/social_buttons_row.dart';
 import 'login_view.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -503,44 +504,10 @@ class _SignupScreenState extends State<SignupScreen>
                   ),
                   const SizedBox(height: 16),
                   // Social Sign-up Buttons (compact)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildSocialButton(
-                        tooltip: 'Continue with Google',
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
-                        border: Border.all(color: Colors.grey.shade300),
-                        onPressed: _continueWithGoogle,
-                        child: Image.asset(
-                          'assets/images/google.png',
-                          width: 22,
-                          height: 22,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      _buildSocialButton(
-                        tooltip: 'Continue with Apple',
-                        backgroundColor: Colors.black,
-                        foregroundColor: Colors.white,
-                        onPressed: _continueWithApple,
-                        child: const Icon(Icons.apple),
-                      ),
-                      const SizedBox(width: 16),
-                      _buildSocialButton(
-                        tooltip: 'Continue with Facebook',
-                        backgroundColor: const Color(0xFF1877F2),
-                        foregroundColor: Colors.white,
-                        onPressed: _continueWithFacebook,
-                        child: Image.asset(
-                          'assets/images/facebook.png',
-                          width: 22,
-                          height: 22,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
-                    ],
+                  SocialButtonsRow(
+                    onGoogle: _continueWithGoogle,
+                    onApple: _continueWithApple,
+                    onFacebook: _continueWithFacebook,
                   ),
 
                   GestureDetector(
@@ -561,54 +528,6 @@ class _SignupScreenState extends State<SignupScreen>
                     ),
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSocialButton({
-    required Color backgroundColor,
-    required Color foregroundColor,
-    required Widget child,
-    required VoidCallback onPressed,
-    String? tooltip,
-    BoxBorder? border,
-  }) {
-    return Tooltip(
-      message: tooltip ?? '',
-      child: Material(
-        color: backgroundColor,
-        elevation: 1,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(12)),
-        ),
-        child: InkWell(
-          customBorder: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-          ),
-          onTap: onPressed,
-          child: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: backgroundColor,
-              borderRadius: const BorderRadius.all(Radius.circular(12)),
-              border: border,
-            ),
-            child: Center(
-              child: IconTheme(
-                data: IconThemeData(color: foregroundColor),
-                child: DefaultTextStyle(
-                  style: TextStyle(
-                    color: foregroundColor,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 22,
-                  ),
-                  child: child,
-                ),
               ),
             ),
           ),

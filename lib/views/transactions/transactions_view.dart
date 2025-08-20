@@ -289,27 +289,24 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
           return matchesSearch && matchesCategory && matchesDate;
         }).toList();
 
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: theme.appBarTheme.backgroundColor,
         elevation: 0,
         title: const Text(
           'Expenses',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
+            icon: const Icon(Icons.add),
             tooltip: 'Manual Entry',
             onPressed: _showManualEntryDialog,
           ),
           IconButton(
-            icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
+            icon: const Icon(Icons.camera_alt_outlined),
             tooltip: 'Scan Receipt',
             onPressed: () async {
               String sampleReceipt = '''
@@ -444,17 +441,18 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
                       itemCount: filteredTxns.length,
                       itemBuilder: (context, index) {
                         final txn = filteredTxns[index];
-                        return GestureDetector(
-                          onLongPress: () => _editOrDeleteDialog(txn),
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 6,
-                            ),
-                            color: Theme.of(context).colorScheme.surface,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                        return Card(
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
+                          ),
+                          color: Theme.of(context).colorScheme.surface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(12),
+                            onLongPress: () => _editOrDeleteDialog(txn),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
