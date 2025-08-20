@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:io' show Platform;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:exp_ocr/views/home/home_view.dart'; // Replace with your actual home screen
 import 'signup_view.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:crypto/crypto.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -20,6 +26,71 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn();
+
+  Widget _buildSocialButton({
+    required Color backgroundColor,
+    required Color foregroundColor,
+    required Widget child,
+    required VoidCallback onPressed,
+    String? tooltip,
+    BoxBorder? border,
+  }) {
+    return Tooltip(
+      message: tooltip ?? '',
+      child: Material(
+        color: backgroundColor,
+        elevation: 1,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.all(Radius.circular(12)),
+        ),
+        child: InkWell(
+          customBorder: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+          ),
+          onTap: onPressed,
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              borderRadius: const BorderRadius.all(Radius.circular(12)),
+              border: border,
+            ),
+            child: Center(
+              child: IconTheme(
+                data: IconThemeData(color: foregroundColor),
+                child: DefaultTextStyle(
+                  style: TextStyle(
+                    color: foregroundColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 22,
+                  ),
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---- Apple nonce helpers ----
+  String _generateNonce([int length = 32]) {
+    const charset =
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._';
+    final random = Random.secure();
+    return List.generate(
+      length,
+      (_) => charset[random.nextInt(charset.length)],
+    ).join();
+  }
+
+  String _sha256ofString(String input) {
+    final bytes = utf8.encode(input);
+    final digest = sha256.convert(bytes);
+    return digest.toString();
+  }
 
   void _login() async {
     if (_formKey.currentState!.validate()) {
@@ -94,6 +165,140 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _loginWithApple() async {
+    if (!Platform.isIOS) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Sign in with Apple is only available on iOS'),
+        ),
+      );
+      return;
+    }
+    try {
+      final rawNonce = _generateNonce();
+      final nonce = _sha256ofString(rawNonce);
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: nonce,
+      );
+
+      final oauth = OAuthProvider(
+        'apple.com',
+      ).credential(idToken: appleCredential.identityToken, rawNonce: rawNonce);
+
+      await _auth.signInWithCredential(oauth);
+
+      final user = _auth.currentUser;
+      if (user != null) {
+        final userDocRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid);
+        final userDoc = await userDocRef.get();
+        if (!userDoc.exists) {
+          await userDocRef.set({
+            'email': user.email,
+            'username':
+                user.displayName ??
+                [
+                  appleCredential.givenName,
+                  appleCredential.familyName,
+                ].where((e) => (e ?? '').isNotEmpty).join(' ').trim(),
+            'profileImage': user.photoURL,
+            'createdAt': FieldValue.serverTimestamp(),
+            'expenses': 0.0,
+          });
+        }
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Login successful!')));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HomeScreen()),
+      );
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (!mounted) return;
+      if (e.code == AuthorizationErrorCode.canceled) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Apple sign-in failed')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Apple sign-in failed')));
+    }
+  }
+
+  Future<void> _loginWithFacebook() async {
+    try {
+      final result = await FacebookAuth.instance.login(
+        permissions: const ['email', 'public_profile'],
+      );
+      if (result.status != LoginStatus.success) {
+        return;
+      }
+      final accessToken = result.accessToken;
+      if (accessToken == null) {
+        throw FirebaseAuthException(
+          code: 'ERROR_MISSING_FACEBOOK_TOKEN',
+          message: 'Missing access token',
+        );
+      }
+      final credential = FacebookAuthProvider.credential(
+        accessToken.tokenString,
+      );
+      await _auth.signInWithCredential(credential);
+
+      final user = _auth.currentUser;
+      if (user != null) {
+        final userDocRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid);
+        final userDoc = await userDocRef.get();
+        if (!userDoc.exists) {
+          await userDocRef.set({
+            'email': user.email,
+            'username': user.displayName ?? '',
+            'profileImage': user.photoURL,
+            'createdAt': FieldValue.serverTimestamp(),
+            'expenses': 0.0,
+          });
+        }
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Login successful!')));
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => HomeScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Facebook sign-in failed')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Facebook sign-in failed')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -125,16 +330,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 16),
 
-                // Google Sign-in Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    onPressed: _loginWithGoogle,
-                    icon: const Icon(Icons.login),
-                    label: const Text('Continue with Google'),
-                  ),
-                ),
                 const SizedBox(height: 8),
 
                 // Password Field
@@ -206,8 +401,48 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
 
                 const SizedBox(height: 16),
-
+                // Social Sign-in Buttons (compact)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSocialButton(
+                      tooltip: 'Continue with Google',
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black87,
+                      border: Border.all(color: Colors.grey.shade300),
+                      onPressed: _loginWithGoogle,
+                      child: Image.asset(
+                        'assets/images/google.png',
+                        width: 22,
+                        height: 22,
+                        filterQuality: FilterQuality.medium,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    _buildSocialButton(
+                      tooltip: 'Continue with Apple',
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      onPressed: _loginWithApple,
+                      child: const Icon(Icons.apple),
+                    ),
+                    const SizedBox(width: 16),
+                    _buildSocialButton(
+                      tooltip: 'Continue with Facebook',
+                      backgroundColor: const Color(0xFF1877F2),
+                      foregroundColor: Colors.white,
+                      onPressed: _loginWithFacebook,
+                      child: Image.asset(
+                        'assets/images/facebook.png',
+                        width: 22,
+                        height: 22,
+                        filterQuality: FilterQuality.medium,
+                      ),
+                    ),
+                  ],
+                ),
                 // Signup Redirect
+                SizedBox(height: 10),
                 GestureDetector(
                   onTap: () {
                     Navigator.pushReplacement(
