@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Every user can only read and write their own data. Deploy with:
+//   firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function validTransaction(d) {
+      return d.amount is number && d.amount >= 0 && d.amount < 10000000
+        && d.categoryId is string && d.categoryId.size() > 0 && d.categoryId.size() <= 64
+        && d.timestamp is timestamp;
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      match /transactions/{txId} {
+        allow read, delete: if isOwner(uid);
+        allow create, update: if isOwner(uid) && validTransaction(request.resource.data);
+      }
+      match /budgets/{budgetId} {
+        allow read, write: if isOwner(uid);
+        match /categories/{categoryId} {
+          allow read, write: if isOwner(uid);
+        }
+      }
+      match /budget_categories/{id} { allow read, write: if isOwner(uid); }
+      match /monthlyIncome/{id} { allow read, write: if isOwner(uid); }
+      match /generalTransactions/{id} { allow read, write: if isOwner(uid); }
+    }
+
+    // Goals are top-level documents tagged with their owner's uid.
+    match /goals/{goalId} {
+      allow read, delete: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if signedIn() && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId;
+    }
+
+    // Reference data maintained by the admin, read-only for users.
+    match /income_tax_categories/{id} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+  }
+}
