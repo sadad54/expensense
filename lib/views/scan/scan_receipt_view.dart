@@ -210,8 +210,11 @@ class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
                     ? 'Could not tell from the receipt'
                     : 'Matched by ${receipt.categorySource}',
               ),
+              // The API can return a category outside the app's default list
+              // (e.g. "Books & Education"); keep it selectable so the dropdown
+              // never holds a value that is missing from its items.
               items: [
-                for (final c in [...expenseCategories, 'Other Expense'])
+                for (final c in <String>{...expenseCategories, 'Other Expense', if (_category != null) _category!})
                   DropdownMenuItem(value: c, child: Text(c)),
               ],
               onChanged: (v) => setState(() => _category = v),
