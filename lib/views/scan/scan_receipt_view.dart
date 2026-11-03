@@ -1,608 +1,274 @@
-import 'dart:convert';
 import 'dart:io';
-import 'package:exp_ocr/util/category_hybrid_matcher.dart';
-import 'package:exp_ocr/util/receipt_parser.dart';
+
+import 'package:exp_ocr/models/scanned_receipt.dart';
+import 'package:exp_ocr/services/receipt_api.dart';
+import 'package:exp_ocr/util/expense_categories.dart';
 import 'package:exp_ocr/util/transaction_utils.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:http/http.dart' as http;
-import 'package:image/image.dart' as img;
-import 'package:provider/provider.dart';
 import 'package:exp_ocr/viewmodels/tax_category_notifier.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
-Future<File> preprocessImage(File file) async {
-  final bytes = await file.readAsBytes();
-  final originalImage = img.decodeImage(bytes);
-  if (originalImage == null) return file;
-  final grayscale = img.grayscale(originalImage);
-  final resized = img.copyResize(
-    grayscale,
-    width: 1024,
-  ); // Optional but recommended
-  final highContrast = img.adjustColor(resized, contrast: 1.2);
-
-  final processedBytes = img.encodeJpg(highContrast);
-
-  final directory = file.parent;
-  final fileName = file.path.split(Platform.pathSeparator).last;
-  final newPath =
-      '${directory.path}/${fileName.split('.').first}_processed.jpg';
-
-  final processedFile = File(newPath);
-  await processedFile.writeAsBytes(processedBytes);
-  return processedFile;
-}
-
-// Ensure the image file is smaller than the OCR API limit (1 MB)
-// by adaptively lowering JPEG quality and, if needed, scaling down.
-Future<File> _compressUnderLimit(
-  File file, {
-  int maxBytes = 1000 * 1024,
-}) async {
-  final bytes = await file.readAsBytes();
-  final decoded = img.decodeImage(bytes);
-  if (decoded == null) return file;
-
-  img.Image image = img.bakeOrientation(decoded);
-  int quality = 85;
-  int currentWidth = image.width;
-
-  List<int> jpg = img.encodeJpg(image, quality: quality);
-
-  while (jpg.length > maxBytes) {
-    if (quality > 55) {
-      quality -= 10;
-    } else {
-      // Reduce dimensions when quality is already low
-      currentWidth = (currentWidth * 0.85).floor();
-      if (currentWidth < 800) break; // safety bound
-      final scale = currentWidth / image.width;
-      image = img.copyResize(
-        image,
-        width: currentWidth,
-        height: (image.height * scale).floor(),
-      );
-      quality = 80; // bump quality a bit after resizing
-    }
-    jpg = img.encodeJpg(image, quality: quality);
-  }
-
-  final out = await file.rename('${file.path}.tmp');
-  final newFile = File(file.path);
-  await newFile.writeAsBytes(jpg, flush: true);
-  // best effort cleanup
-  if (await out.exists()) {
-    try {
-      await out.delete();
-    } catch (_) {}
-  }
-  return newFile;
-}
-
+/// Scan a receipt photo, review what the API extracted, then save it.
+///
+/// OCR, parsing and categorisation run on the ExpenSense API (server/). The
+/// app only resizes the photo to keep the upload small, then shows the result
+/// for the user to confirm or correct before anything is written to Firestore.
 class ScanReceiptScreen extends StatefulWidget {
-  const ScanReceiptScreen({super.key});
+  final ReceiptApi? api; // injectable for tests
+
+  const ScanReceiptScreen({super.key, this.api});
 
   @override
   State<ScanReceiptScreen> createState() => _ScanReceiptScreenState();
 }
 
 class _ScanReceiptScreenState extends State<ScanReceiptScreen> {
-  File? _image;
-  String _extractedText = '';
-  bool _loading = false;
-  String _statusMessage = '';
-
   final ImagePicker _picker = ImagePicker();
-  final String ocrApiKey = dotenv.env['OCR_API_KEY'] ?? '';
+  final _money = NumberFormat.currency(locale: 'en', symbol: 'RM ', decimalDigits: 2);
+  final _amountController = TextEditingController();
+
+  File? _image;
+  ScannedReceipt? _receipt;
+  String? _category;
+  DateTime? _date;
+  bool _loading = false;
+  bool _saving = false;
+  String? _error;
+
+  ReceiptApi? _apiInstance;
+  ReceiptApi get _api => _apiInstance ??= widget.api ?? ReceiptApi.fromEnv();
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
 
   Future<void> _pickImage(ImageSource source) async {
-    try {
-      final pickedFile = await _picker.pickImage(
-        source: source,
-        imageQuality: 80,
-      );
-      if (pickedFile != null) {
-        setState(() {
-          _image = File(pickedFile.path);
-          _extractedText = '';
-          _statusMessage = 'Processing image...';
-        });
-        final preprocessed = await preprocessImage(_image!);
-        final bounded = await _compressUnderLimit(preprocessed);
-        await _uploadImageToOCRSpace(bounded);
-      }
-    } catch (e) {
-      setState(() {
-        _statusMessage = 'Error picking image: $e';
-        _loading = false;
-      });
-    }
-  }
-
-  Future<void> _uploadImageToOCRSpace(File imageFile) async {
+    final picked = await _picker.pickImage(source: source, maxWidth: 2000, maxHeight: 2000, imageQuality: 85);
+    if (picked == null) return;
     setState(() {
+      _image = File(picked.path);
+      _receipt = null;
+      _error = null;
       _loading = true;
-      _statusMessage = 'Uploading to OCR and parsing...';
     });
-
-    final uri = Uri.parse("https://api.ocr.space/parse/image");
-    final request =
-        http.MultipartRequest('POST', uri)
-          ..fields['apikey'] = ocrApiKey
-          ..fields['language'] = 'eng'
-          ..fields['isOverlayRequired'] = 'false'
-          ..fields['OCREngine'] = '2'
-          ..fields['scale'] = 'true'
-          ..fields['isTable'] = 'true'
-          ..fields['detectOrientation'] = 'true'
-          ..files.add(
-            await http.MultipartFile.fromPath('file', imageFile.path),
-          );
-
     try {
-      final response = await request.send();
-      var result = await http.Response.fromStream(response);
-
-      print('🛰️ OCR Response Code: ${result.statusCode}');
-      print('📥 OCR Raw Body: ${result.body}');
-
-      // If still too large, compress further and retry once
-      final bodyLower = result.body.toLowerCase();
-      final isTooBig =
-          result.statusCode == 413 ||
-          bodyLower.contains('file size limit') ||
-          bodyLower.contains('file too large') ||
-          bodyLower.contains('exceeds the maximum permissible file size');
-      if (isTooBig) {
-        setState(() {
-          _statusMessage = 'Optimizing image size...';
-        });
-        final tighter = await _compressUnderLimit(
-          imageFile,
-          maxBytes: 900 * 1024,
-        );
-        final retryReq =
-            http.MultipartRequest('POST', uri)
-              ..fields['apikey'] = ocrApiKey
-              ..fields['language'] = 'eng'
-              ..fields['isOverlayRequired'] = 'false'
-              ..fields['OCREngine'] = '2'
-              ..fields['scale'] = 'true'
-              ..fields['isTable'] = 'true'
-              ..fields['detectOrientation'] = 'true'
-              ..files.add(
-                await http.MultipartFile.fromPath('file', tighter.path),
-              );
-        final retryStream = await retryReq.send();
-        final retryResult = await http.Response.fromStream(retryStream);
-        print('🛰️ OCR Retry Response Code: ${retryResult.statusCode}');
-        print('📥 OCR Retry Raw Body: ${retryResult.body}');
-        final retryJson = json.decode(retryResult.body);
-        if (retryJson['IsErroredOnProcessing'] == false &&
-            retryJson['ParsedResults'] != null &&
-            retryJson['ParsedResults'].isNotEmpty) {
-          final parsedText = retryJson['ParsedResults'][0]['ParsedText'] ?? '';
-          final parsedDetails = extractDataFromReceipt(parsedText.trim());
-          String transactionCategoryName = hybridCategoryMatch(
-            parsedText.trim(),
-          );
-          if (transactionCategoryName == "Uncategorized") {
-            final pickedCategory = await _showTransactionCategoryPicker(
-              context,
-            );
-            if (pickedCategory != null) {
-              transactionCategoryName = pickedCategory;
-            } else {
-              setState(() {
-                _extractedText = 'Raw Text:\n${parsedText.trim()}';
-                _statusMessage = '⚠️ Transaction Uncategorized.';
-                _loading = false;
-              });
-              return;
-            }
-          }
-          final amount =
-              double.tryParse(
-                parsedDetails['amount'].toString().replaceAll(
-                  RegExp(r'[^0-9.]'),
-                  '',
-                ),
-              ) ??
-              0.0;
-          setState(() {
-            _extractedText =
-                'Vendor: ${parsedDetails['vendor']}\nAmount: \$${amount.toStringAsFixed(2)}\nDate: ${parsedDetails['date']}\nCategory: $transactionCategoryName\n---\nRaw Text:\n${parsedText.trim()}';
-            _statusMessage = '✅ Scan successful!';
-          });
-          if (transactionCategoryName != "Uncategorized" && amount > 0) {
-            await saveTransactionAndUpdateBudget(
-              context: context,
-              categoryName: transactionCategoryName,
-              amount: amount,
-              rawText: parsedText.trim(),
-              timestamp:
-                  DateTime.tryParse(parsedDetails['date'] ?? '') ??
-                  DateTime.now(),
-            );
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  "✅ \$${amount.toStringAsFixed(2)} logged under '$transactionCategoryName'",
-                ),
-              ),
-            );
-            if (_isIncomeTaxRelevant(transactionCategoryName)) {
-              Provider.of<TaxCategoryNotifier>(
-                context,
-                listen: false,
-              ).refresh();
-            }
-          }
-          return;
-        } else {
-          // fall through to normal error handling with retry payload
-          result = retryResult;
-        }
-      }
-
-      final jsonData = json.decode(result.body);
-
-      if (jsonData['IsErroredOnProcessing'] == false &&
-          jsonData['ParsedResults'] != null &&
-          jsonData['ParsedResults'].isNotEmpty) {
-        final parsedText = jsonData['ParsedResults'][0]['ParsedText'] ?? '';
-        final parsedDetails = extractDataFromReceipt(parsedText.trim());
-
-        String transactionCategoryName = hybridCategoryMatch(parsedText.trim());
-
-        if (transactionCategoryName == "Uncategorized") {
-          final pickedCategory = await _showTransactionCategoryPicker(context);
-          if (pickedCategory != null) {
-            transactionCategoryName = pickedCategory;
-          } else {
-            setState(() {
-              _extractedText = 'Raw Text:\n${parsedText.trim()}';
-              _statusMessage = '⚠️ Transaction Uncategorized.';
-              _loading = false;
-            });
-            return;
-          }
-        }
-
-        final amount =
-            double.tryParse(
-              parsedDetails['amount'].toString().replaceAll(
-                RegExp(r'[^0-9.]'),
-                '',
-              ),
-            ) ??
-            0.0;
-
-        setState(() {
-          _extractedText = '''
-Vendor: ${parsedDetails['vendor']}
-Amount: \$${amount.toStringAsFixed(2)}
-Date: ${parsedDetails['date']}
-Category: $transactionCategoryName
----
-Raw Text:
-${parsedText.trim()}
-''';
-          _statusMessage = '✅ Scan successful!';
-        });
-
-        if (transactionCategoryName != "Uncategorized" && amount > 0) {
-          await saveTransactionAndUpdateBudget(
-            context: context,
-            categoryName: transactionCategoryName,
-            amount: amount,
-            rawText: parsedText.trim(),
-            timestamp:
-                DateTime.tryParse(parsedDetails['date'] ?? '') ??
-                DateTime.now(),
-          );
-
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                "✅ \$${amount.toStringAsFixed(2)} logged under '$transactionCategoryName'",
-              ),
-            ),
-          );
-          if (_isIncomeTaxRelevant(transactionCategoryName)) {
-            Provider.of<TaxCategoryNotifier>(context, listen: false).refresh();
-          }
-        }
-      } else {
-        setState(() {
-          _statusMessage = '❌ OCR failed to extract text.';
-          _extractedText = 'Raw Response:\n${result.body}';
-        });
-      }
-    } catch (e) {
+      final receipt = await _api.scan(_image!);
+      if (!mounted) return;
       setState(() {
-        _statusMessage = '❌ Error processing receipt: $e';
-        _extractedText = '⚠️ Check your internet connection or image format.';
+        _receipt = receipt;
+        _category = receipt.isUncategorized ? null : receipt.category;
+        _date = receipt.date ?? DateTime.now();
+        _amountController.text = receipt.total?.toStringAsFixed(2) ?? '';
       });
+    } on ReceiptApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not scan this receipt. Try again.');
     } finally {
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  //   Future<void> _uploadImageToOCRSpace(File imageFile) async {
-  //     setState(() {
-  //       _loading = true;
-  //       _statusMessage = 'Uploading to OCR and parsing...';
-  //     });
+  double? get _amount => double.tryParse(_amountController.text.replaceAll(RegExp(r'[^0-9.]'), ''));
 
-  //     final uri = Uri.parse("https://api.ocr.space/parse/image");
-  //     final request =
-  //         http.MultipartRequest('POST', uri)
-  //           ..headers['apikey'] = ocrApiKey
-  //           ..fields['language'] = 'eng'
-  //           ..fields['isOverlayRequired'] = 'false'
-  //           ..fields['OCREngine'] = '2'
-  //           ..fields['scale'] = 'true'
-  //           ..fields['isTable'] = 'true'
-  //           ..fields['detectOrientation'] = 'true'
-  //           ..files.add(
-  //             await http.MultipartFile.fromPath('file', imageFile.path),
-  //           );
+  Future<void> _save() async {
+    final receipt = _receipt;
+    final amount = _amount;
+    if (receipt == null || _category == null || amount == null || amount <= 0) return;
+    setState(() => _saving = true);
+    try {
+      await saveTransactionAndUpdateBudget(
+        context: context,
+        categoryName: _category!,
+        amount: amount,
+        rawText: receipt.rawText,
+        timestamp: _date ?? DateTime.now(),
+      );
+      if (!mounted) return;
+      if (incomeTaxRelevant(_category!)) {
+        Provider.of<TaxCategoryNotifier>(context, listen: false).refresh();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("${_money.format(amount)} logged under '$_category'")),
+      );
+      setState(() {
+        _receipt = null;
+        _image = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Could not save: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
-  //     try {
-  //       final response = await request.send();
-  //       final result = await http.Response.fromStream(response);
-  //       final jsonData = json.decode(result.body);
-
-  //       if (jsonData['IsErroredOnProcessing'] == false &&
-  //           jsonData['ParsedResults'] != null &&
-  //           jsonData['ParsedResults'].isNotEmpty) {
-  //         final parsedText = jsonData['ParsedResults'][0]['ParsedText'] ?? '';
-  //         final parsedDetails = extractDataFromReceipt(parsedText.trim());
-
-  //         String transactionCategoryName = hybridCategoryMatch(parsedText.trim());
-
-  //         if (transactionCategoryName == "Uncategorized") {
-  //           final pickedCategory = await _showTransactionCategoryPicker(context);
-  //           if (pickedCategory != null) {
-  //             transactionCategoryName = pickedCategory;
-  //           } else {
-  //             setState(() {
-  //               _extractedText = 'Raw Text:\n${parsedText.trim()}';
-  //               _statusMessage = '⚠️ Transaction Uncategorized.';
-  //               _loading = false;
-  //             });
-  //             return;
-  //           }
-  //         }
-
-  //         final amount =
-  //             double.tryParse(
-  //               parsedDetails['amount'].toString().replaceAll(
-  //                 RegExp(r'[^0-9.]'),
-  //                 '',
-  //               ),
-  //             ) ??
-  //             0.0;
-
-  //         setState(() {
-  //           _extractedText = '''
-  // Vendor: ${parsedDetails['vendor']}
-  // Amount: \$${amount.toStringAsFixed(2)}
-  // Date: ${parsedDetails['date']}
-  // Category: $transactionCategoryName
-  // ---
-  // Raw Text:
-  // ${parsedText.trim()}
-  // ''';
-  //           _statusMessage = 'Scan successful!';
-  //         });
-
-  //         if (transactionCategoryName != "Uncategorized" && amount > 0) {
-  //           await saveTransactionAndUpdateBudget(
-  //             context: context,
-  //             categoryName: transactionCategoryName,
-  //             amount: amount,
-  //             rawText: parsedText.trim(),
-  //             timestamp:
-  //                 DateTime.tryParse(parsedDetails['date'] ?? '') ??
-  //                 DateTime.now(),
-  //           );
-
-  //           ScaffoldMessenger.of(context).showSnackBar(
-  //             SnackBar(
-  //               content: Text(
-  //                 "✅ \$${amount.toStringAsFixed(2)} logged under '$transactionCategoryName'",
-  //               ),
-  //             ),
-  //           );
-  //         }
-  //       } else {
-  //         setState(() => _statusMessage = '❌ OCR failed to extract text.');
-  //       }
-  //     } catch (e) {
-  //       setState(() => _statusMessage = '❌ Error processing receipt: $e');
-  //     } finally {
-  //       setState(() => _loading = false);
-  //     }
-  //   }
-
-  Future<String?> _showTransactionCategoryPicker(BuildContext context) async {
-    const List<String> transactionCategories = [
-      "Food & Groceries",
-      "Dining & Takeout",
-      "Transportation",
-      "Utilities",
-      "Housing & Rent",
-      "Health & Personal Care",
-      "Entertainment & Subscriptions",
-      "Shopping & Miscellaneous",
-      "Other Expense",
-    ];
-
-    return showModalBottomSheet<String>(
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                "Select Transaction Category",
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              ListView(
-                shrinkWrap: true,
-                children:
-                    transactionCategories
-                        .map(
-                          (cat) => ListTile(
-                            leading: Icon(
-                              Icons.label_outline,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            title: Text(cat),
-                            onTap: () => Navigator.of(context).pop(cat),
-                          ),
-                        )
-                        .toList(),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(null),
-                child: const Text("Cancel"),
-              ),
-            ],
-          ),
-        );
-      },
+      initialDate: _date ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
     );
+    if (picked != null) setState(() => _date = picked);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text("Scan Receipt")),
+      appBar: AppBar(title: const Text('Scan Receipt')),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_image != null && _image!.existsSync())
-                AspectRatio(
-                  aspectRatio: 4 / 3,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.file(_image!, fit: BoxFit.contain),
-                  ),
-                )
-              else if (_image != null)
-                const Text(
-                  "⚠️ Failed to load image preview.",
-                  style: TextStyle(color: Colors.redAccent),
-                )
-              else
-                Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey[700]!),
-                  ),
-                  child: Center(
-                    child: Text(
-                      "Image preview will appear here",
-                      style: TextStyle(color: Colors.grey[400]),
-                    ),
-                  ),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            _Preview(image: _image),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _loading ? null : () => _pickImage(ImageSource.camera),
+                  icon: const Icon(Icons.camera_alt),
+                  label: const Text('Camera'),
                 ),
+                ElevatedButton.icon(
+                  onPressed: _loading ? null : () => _pickImage(ImageSource.gallery),
+                  icon: const Icon(Icons.photo_library),
+                  label: const Text('Gallery'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_loading)
+              const Center(
+                child: Column(children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 8),
+                  Text('Reading receipt...'),
+                ]),
+              ),
+            if (_error != null)
+              Card(
+                color: theme.colorScheme.errorContainer,
+                child: ListTile(
+                  key: const Key('scan-error'),
+                  leading: Icon(Icons.error_outline, color: theme.colorScheme.onErrorContainer),
+                  title: Text(_error!, style: TextStyle(color: theme.colorScheme.onErrorContainer)),
+                ),
+              ),
+            if (_receipt != null) _buildReview(theme, _receipt!),
+          ],
+        ),
+      ),
+    );
+  }
 
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+  Widget _buildReview(ThemeData theme, ScannedReceipt receipt) {
+    final canSave = _category != null && (_amount ?? 0) > 0 && !_saving;
+    return Card(
+      key: const Key('scan-review'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(receipt.merchant ?? 'Unknown merchant', style: theme.textTheme.titleLarge),
+            if (receipt.needsReview)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Some details need checking before you save.',
+                    style: TextStyle(color: theme.colorScheme.tertiary)),
+              ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('scan-amount'),
+              controller: _amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Total', prefixText: 'RM '),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.event),
+              title: Text(DateFormat.yMMMd().format(_date ?? DateTime.now())),
+              subtitle: Text(receipt.date == null ? 'Date not found on receipt' : 'Date from receipt'),
+              trailing: const Icon(Icons.edit_calendar),
+              onTap: _pickDate,
+            ),
+            DropdownButtonFormField<String>(
+              key: const Key('scan-category'),
+              value: _category,
+              hint: const Text('Choose a category'),
+              decoration: InputDecoration(
+                labelText: 'Category',
+                helperText: receipt.isUncategorized
+                    ? 'Could not tell from the receipt'
+                    : 'Matched by ${receipt.categorySource}',
+              ),
+              items: [
+                for (final c in [...expenseCategories, 'Other Expense'])
+                  DropdownMenuItem(value: c, child: Text(c)),
+              ],
+              onChanged: (v) => setState(() => _category = v),
+            ),
+            if (receipt.lineItems.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text('${receipt.lineItems.length} items'),
                 children: [
-                  ElevatedButton.icon(
-                    onPressed:
-                        _loading ? null : () => _pickImage(ImageSource.camera),
-                    icon: const Icon(Icons.camera_alt),
-                    label: const Text("Camera"),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
+                  for (final item in receipt.lineItems)
+                    ListTile(
+                      dense: true,
+                      title: Text(item.description),
+                      trailing: Text(_money.format(item.amount)),
                     ),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed:
-                        _loading ? null : () => _pickImage(ImageSource.gallery),
-                    icon: const Icon(Icons.photo_library),
-                    label: const Text("Gallery"),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(0, 48),
-                    ),
-                  ),
                 ],
               ),
-              const SizedBox(height: 16),
-              if (_loading)
-                const Center(child: CircularProgressIndicator())
-              else if (_statusMessage.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text(
-                    _statusMessage,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.amber),
-                  ),
-                ),
-
-              SizedBox(
-                height: 260,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[850],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child:
-                      _extractedText.isNotEmpty
-                          ? SingleChildScrollView(
-                            child: Text(
-                              _extractedText,
-                              style: const TextStyle(fontSize: 14, height: 1.5),
-                            ),
-                          )
-                          : const Center(
-                            child: Text(
-                              "Scanned details will appear here.",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          ),
-                ),
-              ),
             ],
-          ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              key: const Key('scan-save'),
+              onPressed: canSave ? _save : null,
+              icon: _saving
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.check),
+              label: const Text('Save expense'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-bool _isIncomeTaxRelevant(String category) {
-  return [
-    "Food & Groceries",
-    "Dining & Takeout",
-    "Transportation",
-    "Utilities",
-    "Housing & Rent",
-    "Health & Personal Care",
-    "Entertainment & Subscriptions",
-    "Shopping & Miscellaneous",
-  ].contains(category);
+class _Preview extends StatelessWidget {
+  final File? image;
+
+  const _Preview({required this.image});
+
+  @override
+  Widget build(BuildContext context) {
+    if (image != null && image!.existsSync()) {
+      return AspectRatio(
+        aspectRatio: 4 / 3,
+        child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(image!, fit: BoxFit.contain)),
+      );
+    }
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(child: Text('Take or choose a photo of a receipt')),
+    );
+  }
 }
+
+bool incomeTaxRelevant(String category) => expenseCategories.contains(category);
