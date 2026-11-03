@@ -1,0 +1,14 @@
+{
+  "split": "test",
+  "receipts": 326,
+  "receipts_with_parseable_gold_date": 323,
+  "receipts_with_gold_total": 326,
+  "total_accuracy": 0.9693,
+  "date_accuracy": 0.9659,
+  "merchant_accuracy": 0.7423,
+  "category_coverage": 0.9356,
+  "baseline_total_accuracy": 0.6718,
+  "baseline_date_accuracy": 0.0,
+  "baseline_merchant_accuracy": 0.5368,
+  "mean_parse_ms": 2.467
+}
